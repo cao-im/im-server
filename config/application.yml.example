@@ -1,0 +1,80 @@
+# 曹操IM Server 生产环境配置
+# 复制此文件到 config/application.yml 并根据实际情况修改
+#
+# ⚠️ 重要提示：服务端口已由源码强制锁定为 80（HTTP标准端口）
+#
+# 【为什么强制使用80端口？】
+# - 80 端口是 HTTP 协议的标准端口，无需在 URL 中指定端口号
+# - 用户访问更简洁：http://im.yourdomain.com/api 而非 http://im.yourdomain.com:8080/api
+# - 符合云服务器域名备案规范（域名+80/443端口需要ICP备案）
+# - 避免因端口配置不一致导致客户端连接失败
+# - 后期客户端等增值服务也会强制校验服务端口
+#
+# 【部署建议】强烈建议单独使用一台服务器部署 IM 服务！
+# - 80 端口是 Web 服务常用端口，可能与 Nginx/Apache 等冲突
+# - 单独部署可避免端口占用问题
+# - 便于独立扩展和维护
+# - 生产环境建议使用域名 + HTTPS (443端口) 反向代理到本服务
+#
+# 【安全限制】以下方式均无法修改端口：
+# - ✗ 修改此配置文件的 port 值不会生效
+# - ✗ 使用 --server.port 启动参数也不会生效
+# - ✗ 设置 SERVER_PORT 环境变量同样无效
+# - ✗ 这是安全设计，确保 SDK 客户端能正确连接
+#
+# 【如需更改端口】（需要重新编译，不推荐）：
+#   1. 编辑 im-boot/src/main/java/com/caoim/imserver/ImServerApplication.java
+#   2. 修改 FORCED_PORT 常量值
+#   3. 编辑 PortBindingValidator.java 修改 EXPECTED_PORT 和 BUILD_SIGNATURE
+#   4. 同步修改 Flutter SDK 中的 _expectedPort 和 _buildSignature 常量
+#   5. 执行 mvn clean package 重新编译
+
+server:
+  # 端口已锁定为 80，此处仅作参考，实际值由代码强制设定
+  port: 80
+  servlet:
+    context-path: /api
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 修改为您的数据库地址
+    url: jdbc:mysql://localhost:3306/cao_im_db?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: your_password_here  # ← 修改密码
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:  # Redis 密码（如果有）
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+jwt:
+  secret: your-production-secret-key-must-be-very-long-and-secure  # ← 修改密钥
+  expiration: 86400000  # Token 有效期（毫秒），默认24小时
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: false  # 生产环境建议关闭 Swagger
