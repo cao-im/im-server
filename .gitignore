@@ -1,0 +1,39 @@
+# Maven
+target/
+*.jar
+*.war
+*.ear
+*.log
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+
+# Java
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Env & Config (keep example files)
+config/application.yml
+config/application-*.yml
+!config/*.example
+
+# Logs
+logs/
+*.log
+
+# Temp
+*.tmp
+*.bak
+*.swp
+*~

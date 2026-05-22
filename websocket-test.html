@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>曹操IM WebSocket 测试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .panel h2 {
+            color: #495057;
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            color: #495057;
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #51cf66 0%, #40c057 100%);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(81, 207, 102, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-connected {
+            background: #d3f9d8;
+            color: #2b8a3e;
+        }
+
+        .status-disconnected {
+            background: #ffe3e3;
+            color: #c92a2a;
+        }
+
+        .status-connecting {
+            background: #fff3cd;
+            color: #e67700;
+        }
+
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .msg {
+            margin: 10px 0;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+            word-wrap: break-word;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .msg-sent {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-received {
+            background: #f1f3f5;
+            color: #212529;
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg-system {
+            background: #fff3cd;
+            color: #856404;
+            text-align: center;
+            margin: 15px auto;
+            max-width: 90%;
+            font-size: 13px;
+            padding: 8px 16px;
+        }
+
+        .msg-error {
+            background: #ffe3e3;
+            color: #c92a2a;
+            text-align: center;
+            margin: 15px auto;
+            max-width: 90%;
+            font-size: 13px;
+            padding: 8px 16px;
+        }
+
+        .msg-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .msg-status {
+            font-size: 10px;
+            margin-top: 4px;
+            text-align: right;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .msg:hover .msg-status,
+        .msg-status.status-sending {
+            opacity: 1;
+        }
+
+        .status-sending {
+            color: #fd7e14;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-sent {
+            color: #868e96;
+        }
+
+        .status-delivered {
+            color: #4dabf7;
+        }
+
+        .status-read {
+            color: #51cf66;
+        }
+
+        .msg-content {
+            word-wrap: break-word;
+        }
+
+        .msg-system-text {
+            font-size: 13px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .info-item {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #868e96;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .quick-btn {
+            padding: 10px;
+            font-size: 13px;
+            background: white;
+            border: 2px solid #667eea;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quick-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #868e96;
+            font-size: 13px;
+            border-top: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🚀 曹操IM WebSocket 测试工具</h1>
+        <p>实时消息收发测试 | 支持私聊 & 群聊</p>
+    </div>
+
+    <div class="content">
+        <!-- 左侧：连接和发送控制 -->
+        <div class="panel">
+            <h2>📡 连接配置</h2>
+
+            <div class="form-group">
+                <label for="serverUrl">服务器地址</label>
+                <input type="text" id="serverUrl" value="ws://localhost/api/ws" placeholder="ws://localhost/api/ws">
+            </div>
+
+            <div class="form-group">
+                <label for="token">用户 Token</label>
+                <textarea id="token" rows="3" placeholder="请输入登录后获取的 JWT Token"></textarea>
+                <div style="margin-top: 8px; font-size: 12px; color: #868e96;">
+                    💡 提示：先通过 API 登录获取 Token：<br>
+                    POST http://localhost/api/user/login<br>
+                    {"username":"xxx","password":"xxx"}<br><br>
+                    ⚠️ <b>注意：</b>请勿在多个浏览器标签页同时打开此页面，<br>
+                    否则会导致消息重复接收！
+                </div>
+            </div>
+
+            <button id="connectBtn" class="btn-primary" onclick="connect()">🔗 连接服务器</button>
+            <button id="disconnectBtn" class="btn-danger" onclick="disconnect()" disabled>🔌 断开连接</button>
+
+            <div style="text-align: center; margin-top: 15px;">
+                <span style="font-weight: 600;">状态：</span>
+                <span id="status" class="status-badge status-disconnected">未连接</span>
+                <span id="connectionInfo" style="margin-left: 10px; font-size: 12px; color: #868e96;"></span>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">连接时间</div>
+                    <div class="info-value" id="connectTime">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">已连接时长</div>
+                    <div class="info-value" id="duration">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">发送消息数</div>
+                    <div class="info-value" id="sentCount">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">接收消息数</div>
+                    <div class="info-value" id="receivedCount">0</div>
+                </div>
+            </div>
+
+            <h2 style="margin-top: 25px;">💬 发送消息</h2>
+
+            <div class="form-group">
+                <label for="msgType">消息类型</label>
+                <select id="msgType">
+                    <option value="private">👤 私聊消息</option>
+                    <option value="group">👥 群聊消息</option>
+                    <option value="ping">💓 心跳检测</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="toIdGroup">
+                <label for="toId">目标用户 ID</label>
+                <input type="number" id="toId" value="2" placeholder="接收方的用户ID">
+            </div>
+
+            <div class="form-group" id="groupIdGroup" style="display: none;">
+                <label for="groupId">群组 ID</label>
+                <input type="number" id="groupId" value="1" placeholder="群组ID">
+            </div>
+
+            <div class="form-group" id="contentGroup">
+                <label for="content">消息内容</label>
+                <textarea id="content" rows="3" placeholder="请输入消息内容..."></textarea>
+            </div>
+
+            <button class="btn-success" onclick="sendMessage()" id="sendBtn" disabled>📤 发送消息</button>
+
+            <div class="quick-actions">
+                <button class="quick-btn" onclick="fillTemplate('hello')">👋 你好</button>
+                <button class="quick-btn" onclick="fillTemplate('time')">⏰ 当前时间</button>
+                <button class="quick-btn" onclick="fillTemplate('test')">🧪 测试消息</button>
+                <button class="quick-btn" onclick="clearMessages()">🗑️ 清空消息</button>
+            </div>
+        </div>
+
+        <!-- 右侧：消息显示区 -->
+        <div class="panel">
+            <h2>📨 消息记录</h2>
+            <div id="messages">
+                <div class="msg msg-system">系统消息：等待连接...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        曹操IM (Cao-IM) WebSocket 测试工具 v1.0 | 基于事件驱动的实时推送架构
+    </div>
+</div>
+
+<script>
+let ws = null;
+let sentCount = 0;
+let receivedCount = 0;
+let connectTime = null;
+let timerInterval = null;
+let lastMessageId = null;  // 用于消息去重
+
+document.getElementById('msgType').addEventListener('change', function() {
+    const type = this.value;
+    document.getElementById('toIdGroup').style.display = type === 'group' ? 'none' : (type === 'ping' ? 'none' : 'block');
+    document.getElementById('groupIdGroup').style.display = type === 'group' ? 'block' : 'none';
+    document.getElementById('contentGroup').style.display = type === 'ping' ? 'none' : 'block';
+});
+
+function connect() {
+    const serverUrl = document.getElementById('serverUrl').value.trim();
+    const token = document.getElementById('token').value.trim();
+
+    if (!token) {
+        alert('❌ 请输入 Token！');
+        return;
+    }
+
+    if (!serverUrl) {
+        alert('❌ 请输入服务器地址！');
+        return;
+    }
+
+    // 检查是否已有连接，如果有则先关闭
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        console.warn('[WebSocket] ⚠️ 检测到已有连接，正在关闭...');
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.close(1000, '重新连接');
+        }
+        ws = null;
+        
+        // 清理定时器
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+        
+        // 短暂延迟后重新连接
+        setTimeout(() => {
+            connect();
+        }, 500);
+        return;
+    }
+
+    updateStatus('connecting', '连接中...');
+    addMessage('system', '正在连接到服务器...');
+
+    const encodedToken = encodeURIComponent(token);
+    const url = serverUrl.includes('?') 
+        ? `${serverUrl}&token=${encodedToken}` 
+        : `${serverUrl}?token=${encodedToken}`;
+
+    console.log('[WebSocket] 连接URL:', url);
+    console.log('[WebSocket] Token长度:', token.length);
+
+    try {
+        ws = new WebSocket(url);
+
+        ws.onopen = function() {
+            console.log('[WebSocket] ✅ 连接成功！');
+            console.log('[WebSocket] readyState:', ws.readyState);
+            
+            updateStatus('connected', '✅ 已连接');
+            document.getElementById('connectionInfo').textContent = `🔗 单连接模式 | ${new Date().toLocaleTimeString('zh-CN', {hour12: false})}`;
+            connectTime = new Date();
+            document.getElementById('connectTime').textContent = formatTime(connectTime);
+
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+
+            addMessage('system', '✅ 成功连接到服务器！');
+
+            timerInterval = setInterval(updateDuration, 1000);
+
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendPing();
+                }
+            }, 1000);
+        };
+
+        ws.onmessage = function(event) {
+            console.log('[WebSocket] 📨 收到原始消息:', event.data);
+            
+            try {
+                const data = JSON.parse(event.data);
+                
+                // 消息去重：基于消息内容+时间戳生成唯一标识
+                const messageId = data.msgId || data.id || `${data.type}_${data.content}_${Date.now()}`;
+                
+                if (messageId === lastMessageId) {
+                    console.warn('[WebSocket] ⚠️ 检测到重复消息，已忽略:', messageId);
+                    return;  // 忽略重复消息
+                }
+                
+                lastMessageId = messageId;
+                receivedCount++;
+                document.getElementById('receivedCount').textContent = receivedCount;
+                
+                console.log('[WebSocket] ✅ 处理新消息 (累计接收:', receivedCount, '条):', data);
+                
+                if (data.type === 'pong') {
+                    // 心跳响应不显示，只记录到控制台
+                    console.log('[WebSocket] 💓 心跳响应正常');
+                } else if (data.type === 'message') {
+                    addMessage('received', formatMessage(data));
+                } else if (data.type === 'group_message') {
+                    addMessage('received', `👥 [群消息] ${formatMessage(data)}`);
+                } else if (data.type === 'send_confirmation') {
+                    const msgId = data.messageId || null;
+                    updateLastSentStatus(data.status || 'sent', msgId);
+                    console.log('[WebSocket] ✅ 消息发送确认:', data);
+                } else if (data.type === 'error') {
+                    addMessage('error', `❌ 错误: ${data.message}`);
+                } else {
+                    addMessage('received', JSON.stringify(data, null, 2));
+                }
+            } catch (e) {
+                addMessage('received', event.data);
+            }
+        };
+
+        ws.onclose = function(event) {
+            updateStatus('disconnected', '❌ 已断开');
+            document.getElementById('connectionInfo').textContent = '';
+            
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+
+            let reason = '';
+            if (event.code === 1000) {
+                reason = '正常关闭';
+            } else if (event.code === 1006) {
+                reason = '连接异常关闭（可能Token无效或服务未启动）';
+            } else {
+                reason = `代码: ${event.code}, 原因: ${event.reason || '未知'}`;
+            }
+
+            addMessage('system', `🔌 连接已断开 - ${reason}`);
+        };
+
+        ws.onerror = function(error) {
+            addMessage('error', '❌ WebSocket 连接错误！请检查：\n1. 服务是否启动\n2. 地址是否正确\n3. Token是否有效');
+            console.error('WebSocket Error:', error);
+        };
+    } catch (e) {
+        addMessage('error', `❌ 连接失败: ${e.message}`);
+        updateStatus('disconnected', '❌ 连接失败');
+    }
+}
+
+function disconnect() {
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+}
+
+function sendMessage() {
+    console.log('[WebSocket] 开始发送消息...');
+    console.log('[WebSocket] ws对象:', ws);
+    console.log('[WebSocket] readyState:', ws ? ws.readyState : 'null');
+    
+    if (!ws) {
+        alert('❌ WebSocket 未初始化，请先连接服务器！');
+        console.error('[WebSocket] 错误: ws 为 null');
+        return;
+    }
+    
+    if (ws.readyState !== WebSocket.OPEN) {
+        const stateMap = {
+            0: '正在连接',
+            1: '已连接',
+            2: '正在关闭',
+            3: '已关闭'
+        };
+        alert(`❌ 连接状态异常！当前状态: ${stateMap[ws.readyState] || ws.readyState}\n请重新连接服务器！`);
+        console.error(`[WebSocket] 错误: readyState = ${ws.readyState} (${stateMap[ws.readyState]})`);
+        return;
+    }
+
+    const msgType = document.getElementById('msgType').value;
+    console.log('[WebSocket] 消息类型:', msgType);
+    
+    if (msgType === 'ping') {
+        sendPing();
+        return;
+    }
+
+    const toId = document.getElementById('toId').value;
+    const groupId = document.getElementById('groupId').value;
+    const content = document.getElementById('content').value.trim();
+
+    if (!content) {
+        alert('❌ 请输入消息内容！');
+        return;
+    }
+
+    let message = {};
+    
+    if (msgType === 'private') {
+        if (!toId) {
+            alert('❌ 请输入目标用户 ID！');
+            return;
+        }
+        message = {
+            type: 'private',
+            toId: parseInt(toId),
+            content: content,
+            msgType: 0
+        };
+    } else if (msgType === 'group') {
+        if (!groupId) {
+            alert('❌ 请输入群组 ID！');
+            return;
+        }
+        message = {
+            type: 'group',
+            groupId: parseInt(groupId),
+            content: content,
+            msgType: 0
+        };
+    }
+
+    try {
+        const messageStr = JSON.stringify(message);
+        console.log('[WebSocket] 发送消息内容:', message);
+        console.log('[WebSocket] 消息JSON长度:', messageStr.length);
+        
+        ws.send(messageStr);
+        sentCount++;
+        document.getElementById('sentCount').textContent = sentCount;
+        
+        console.log('[WebSocket] ✅ 消息已提交，等待服务器确认...');
+        
+        let msgText = '';
+        if (msgType === 'private') {
+            msgText = `[发给用户${toId}] ${content}`;
+        } else {
+            msgText = `[发到群${groupId}] ${content}`;
+        }
+        
+        addMessage('sent', msgText);
+        updateLastSentStatus('sending');  // 显示"发送中..."
+
+        document.getElementById('content').value = '';
+    } catch (e) {
+        console.error('[WebSocket] ❌ 发送失败:', e);
+        addMessage('error', `❌ 发送失败: ${e.message}\n\n可能原因:\n1. 连接已断开\n2. 消息格式错误\n3. 网络问题`);
+    }
+}
+
+function sendPing() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({type: 'ping'}));
+        console.log('[WebSocket] 💓 发送心跳...');
+    }
+}
+
+function addMessage(type, text, metadata) {
+    const div = document.createElement('div');
+    div.className = `msg msg-${type}`;
+    
+    if (metadata && metadata.messageId) {
+        div.dataset.messageId = metadata.messageId;
+    }
+    
+    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    
+    if (type === 'sent' || type === 'received') {
+        div.innerHTML = `
+            <div class="msg-content">${text}</div>
+            <div class="msg-time">${time}</div>
+            <div class="msg-status" data-msg-type="${type}"></div>
+        `;
+    } else {
+        div.innerHTML = `<span class="msg-system-text">[${time}] ${text}</span>`;
+    }
+    
+    document.getElementById('messages').appendChild(div);
+    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    
+    return div;
+}
+
+function updateLastSentStatus(status, messageId) {
+    const messagesContainer = document.getElementById('messages');
+    const sentMessages = messagesContainer.querySelectorAll('.msg-sent');
+    
+    if (sentMessages.length > 0) {
+        const lastSentMsg = sentMessages[sentMessages.length - 1];
+        const statusEl = lastSentMsg.querySelector('.msg-status');
+        
+        if (statusEl) {
+            let statusText = '';
+            let statusClass = '';
+            
+            switch(status) {
+                case 'sending':
+                    statusText = '⏳ 发送中...';
+                    statusClass = 'status-sending';
+                    break;
+                case 'sent':
+                    statusText = '✓ 已发送';
+                    statusClass = 'status-sent';
+                    break;
+                case 'delivered':
+                    statusText = '✓✓ 已送达';
+                    statusClass = 'status-delivered';
+                    break;
+                case 'read':
+                    statusText = '✓✓ 已读';
+                    statusClass = 'status-read';
+                    break;
+                default:
+                    statusText = status;
+                    statusClass = '';
+            }
+            
+            statusEl.textContent = statusText;
+            statusEl.className = `msg-status ${statusClass}`;
+            
+            if (messageId) {
+                lastSentMsg.closest('.msg-sent').dataset.messageId = messageId;
+            }
+        }
+    }
+}
+
+function formatMessage(data) {
+    if (data.data) {
+        const msg = data.data;
+        return `${msg.content || ''}`;
+    }
+    return JSON.stringify(data, null, 2);
+}
+
+function updateStatus(status, text) {
+    const statusEl = document.getElementById('status');
+    statusEl.className = `status-badge status-${status}`;
+    statusEl.textContent = text;
+}
+
+function updateDuration() {
+    if (connectTime) {
+        const now = new Date();
+        const diff = Math.floor((now - connectTime) / 1000);
+        const hours = Math.floor(diff / 3600);
+        const minutes = Math.floor((diff % 3600) / 60);
+        const seconds = diff % 60;
+        
+        let duration = '';
+        if (hours > 0) duration += `${hours}时`;
+        if (minutes > 0) duration += `${minutes}分`;
+        duration += `${seconds}秒`;
+        
+        document.getElementById('duration').textContent = duration;
+    }
+}
+
+function formatTime(date) {
+    return date.toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+function fillTemplate(type) {
+    const content = document.getElementById('content');
+    
+    switch(type) {
+        case 'hello':
+            content.value = '你好！这是一条测试消息 🎉';
+            break;
+        case 'time':
+            content.value = `当前时间：${new Date().toLocaleString('zh-CN')} ⏰`;
+            break;
+        case 'test':
+            content.value = `测试消息 #${Math.floor(Math.random() * 10000)} - ${new Date().toISOString()} 🧪`;
+            break;
+    }
+    
+    content.focus();
+}
+
+function clearMessages() {
+    document.getElementById('messages').innerHTML = '<div class="msg msg-system">🗑️ 消息已清空</div>';
+    sentCount = 0;
+    receivedCount = 0;
+    document.getElementById('sentCount').textContent = '0';
+    document.getElementById('receivedCount').textContent = '0';
+}
+
+window.addEventListener('beforeunload', function() {
+    if (ws) {
+        ws.close();
+    }
+});
+</script>
+</body>
+</html>

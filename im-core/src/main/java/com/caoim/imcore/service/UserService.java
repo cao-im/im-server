@@ -92,4 +92,9 @@ public class UserService {
         user.setStatus(status);
         userMapper.updateById(user);
     }
+
+    public boolean existsById(Long userId) {
+        if (userId == null) return false;
+        return userMapper.selectById(userId) != null;
+    }
 }

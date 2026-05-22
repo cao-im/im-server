@@ -1,6 +1,7 @@
 package com.caoim.imserver.websocket;
 
 import com.alibaba.fastjson2.JSON;
+import com.caoim.imcore.common.BusinessException;
 import com.caoim.imcore.common.Constants;
 import com.caoim.imcore.entity.Message;
 import com.caoim.imcore.service.MessageService;
@@ -82,53 +83,70 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handlePrivateMessage(Long fromId, Map<String, Object> msgMap) {
-        Long toId = Long.valueOf(msgMap.get("toId").toString());
-        String content = (String) msgMap.get("content");
-        Integer msgType = msgMap.get("msgType") != null ?
-                Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
+        try {
+            Long toId = Long.valueOf(msgMap.get("toId").toString());
+            String content = (String) msgMap.get("content");
+            Integer msgType = msgMap.get("msgType") != null ?
+                    Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
 
-        Message message = messageService.sendMessage(fromId, toId, null, content, msgType);
+            log.info("处理私聊消息: fromId={}, toId={}, content={}", fromId, toId, content);
 
-        Map<String, Object> response = Map.of(
-                "type", "message",
-                "data", message
-        );
+            // 调用消息服务（会保存消息 + 发布事件，由 Listener 负责推送）
+            Message message = messageService.sendMessage(fromId, toId, null, content, msgType);
 
-        WebSocketSession toSession = USER_SESSIONS.get(toId);
-        if (toSession != null && toSession.isOpen()) {
-            sendToUser(toSession, JSON.toJSONString(response));
-        }
-
-        WebSocketSession fromSession = USER_SESSIONS.get(fromId);
-        if (fromSession != null && fromSession.isOpen()) {
-            sendToUser(fromSession, JSON.toJSONString(response));
+            log.info("消息已保存并发布推送事件: messageId={}, fromId={}, toId={}", 
+                    message.getId(), fromId, toId);
+            
+            // 注意：不再在这里直接推送！
+            // 推送逻辑统一由 WebSocketMessageListener (MessageSentEvent) 处理
+            // 这样可以避免重复推送问题
+            
+        } catch (BusinessException e) {
+            log.error("私聊消息发送失败: {}", e.getMessage());
+            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
+            if (fromSession != null && fromSession.isOpen()) {
+                sendError(fromSession, e.getMessage());
+            }
+        } catch (Exception e) {
+            log.error("处理私聊消息异常: ", e);
+            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
+            if (fromSession != null && fromSession.isOpen()) {
+                sendError(fromSession, "消息发送失败: " + e.getMessage());
+            }
         }
     }
 
     private void handleGroupMessage(Long fromId, Map<String, Object> msgMap) {
-        Long groupId = Long.valueOf(msgMap.get("groupId").toString());
-        String content = (String) msgMap.get("content");
-        Integer msgType = msgMap.get("msgType") != null ?
-                Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
+        try {
+            Long groupId = Long.valueOf(msgMap.get("groupId").toString());
+            String content = (String) msgMap.get("content");
+            Integer msgType = msgMap.get("msgType") != null ?
+                    Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
 
-        Message message = messageService.sendMessage(fromId, null, groupId, content, msgType);
+            log.info("处理群聊消息: fromId={}, groupId={}, content={}", fromId, groupId, content);
 
-        Map<String, Object> response = Map.of(
-                "type", "group_message",
-                "data", message,
-                "groupId", groupId
-        );
+            // 调用消息服务（会保存消息 + 发布事件，由 Listener 负责推送）
+            Message message = messageService.sendMessage(fromId, null, groupId, content, msgType);
 
-        for (Map.Entry<Long, WebSocketSession> entry : USER_SESSIONS.entrySet()) {
-            WebSocketSession session = entry.getValue();
-            if (session.isOpen() && !entry.getKey().equals(fromId)) {
-                sendToUser(session, JSON.toJSONString(response));
+            log.info("群消息已保存并发布推送事件: messageId={}, groupId={}", 
+                    message.getId(), groupId);
+            
+            // 注意：不再在这里直接广播！
+            // 推送逻辑统一由 WebSocketMessageListener (MessageSentEvent) 处理
+            // 这样可以避免重复推送问题
+            
+        } catch (BusinessException e) {
+            log.error("群聊消息发送失败: {}", e.getMessage());
+            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
+            if (fromSession != null && fromSession.isOpen()) {
+                sendError(fromSession, e.getMessage());
             }
-        }
-
-        WebSocketSession fromSession = USER_SESSIONS.get(fromId);
-        if (fromSession != null && fromSession.isOpen()) {
-            sendToUser(fromSession, JSON.toJSONString(response));
+        } catch (Exception e) {
+            log.error("处理群聊消息异常: ", e);
+            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
+            if (fromSession != null && fromSession.isOpen()) {
+                sendError(fromSession, "消息发送失败: " + e.getMessage());
+            }
         }
     }
 
@@ -162,6 +180,61 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 }
             }
         }
+    }
+
+    public void pushMessageToUser(Long userId, String message) {
+        WebSocketSession session = USER_SESSIONS.get(userId);
+        if (session != null && session.isOpen()) {
+            sendToUser(session, message);
+        }
+    }
+
+    public void pushPrivateMessage(Long fromId, Long toId, Object messageData) {
+        String message = JSON.toJSONString(Map.of(
+                "type", "message",
+                "data", messageData
+        ));
+
+        pushMessageToUser(toId, message);
+        
+        sendSendConfirmation(fromId, messageData);
+    }
+
+    public void pushGroupMessage(Long fromId, Long groupId, Object messageData) {
+        String message = JSON.toJSONString(Map.of(
+                "type", "group_message",
+                "data", messageData,
+                "groupId", groupId
+        ));
+
+        for (Map.Entry<Long, WebSocketSession> entry : USER_SESSIONS.entrySet()) {
+            if (!entry.getKey().equals(fromId)) {
+                pushMessageToUser(entry.getKey(), message);
+            }
+        }
+        
+        sendSendConfirmation(fromId, messageData);
+    }
+    
+    private void sendSendConfirmation(Long fromId, Object messageData) {
+        Map<String, Object> confirmation;
+        if (messageData instanceof Message) {
+            Message msg = (Message) messageData;
+            confirmation = Map.of(
+                    "type", "send_confirmation",
+                    "messageId", msg.getId(),
+                    "status", "sent",
+                    "timestamp", System.currentTimeMillis()
+            );
+        } else {
+            confirmation = Map.of(
+                    "type", "send_confirmation",
+                    "status", "sent",
+                    "timestamp", System.currentTimeMillis()
+            );
+        }
+        
+        pushMessageToUser(fromId, JSON.toJSONString(confirmation));
     }
 
     private void sendError(WebSocketSession session, String error) {

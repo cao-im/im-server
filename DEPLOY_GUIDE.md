@@ -14,7 +14,7 @@ mvn clean package -pl im-boot -am -DskipTests
 
 **✅ 成功后生成的文件：**
 ```
-im-server/im-boot/target/im-boot-1.0.0.jar  ← 这就是完整的可执行 JAR！
+im-server/im-boot/target/cao-im.jar  ← 这就是完整的可执行 JAR！
 ```
 
 **📊 JAR 包大小：约 80-100MB（包含所有依赖）**
@@ -49,7 +49,7 @@ mkdir -p "$RELEASE_DIR"/{bin,config,logs}
 
 # 3. 复制文件
 echo "[2/4] 正在复制文件..."
-cp im-boot/target/im-boot-1.0.0.jar "$RELEASE_DIR/"
+cp im-boot/target/cao-im.jar "$RELEASE_DIR/"
 cp bin/caoim-server.sh "$RELEASE_DIR/bin/"
 cp config/application.yml.example "$RELEASE_DIR/config/application.yml"
 
@@ -181,19 +181,19 @@ bin\caoim-server.bat start
 
 ```bash
 # 基本启动
-java -jar im-boot-1.0.0.jar
+java -jar cao-im.jar
 
 # 指定配置文件
-java -jar im-boot-1.0.0.jar --spring.config.location=config/application.yml
+java -jar cao-im.jar --spring.config.location=config/application.yml
 
 # 自定义 JVM 参数
-java -Xms512m -Xmx1024m -jar im-boot-1.0.0.jar
+java -Xms512m -Xmx1024m -jar cao-im.jar
 
 # 后台运行（Linux）
-nohup java -jar im-boot-1.0.0.jar > console.log 2>&1 &
+nohup java -jar cao-im.jar > console.log 2>&1 &
 
 # 后台运行（Windows PowerShell）
-Start-Process java -ArgumentList "-jar","im-boot-1.0.0.jar" -WindowStyle Hidden
+Start-Process java -ArgumentList "-jar","cao-im.jar" -WindowStyle Hidden
 ```
 
 ---
@@ -265,7 +265,7 @@ release/cao-im-server-1.0.0/
 │   └── application.yml        # 配置文件（需修改）
 ├── logs/                      # 日志目录（自动创建）
 │   └── console.log            # 控制台日志
-├── im-boot-1.0.0.jar          # 可执行 JAR 包 ★
+├── cao-im.jar              # 可执行 JAR 包 ★
 ├── schema.sql                 # 数据库初始化脚本
 └── README.txt                 # 说明文档
 ```
@@ -341,7 +341,7 @@ After=network.target mysql.service redis.service
 Type=simple
 User=www-data
 WorkingDirectory=/opt/cao-im-server
-ExecStart=/usr/bin/java -Xms512m -Xmx1024m -jar /opt/cao-im-server/im-boot-1.0.0.jar --spring.config.location=config/application.yml
+ExecStart=/usr/bin/java -Xms512m -Xmx1024m -jar /opt/cao-im-server/cao-im.jar --spring.config.location=config/application.yml
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -366,7 +366,7 @@ sudo journalctl -u cao-im -f
 
 ```powershell
 # 下载 nssm: https://nssm.cc/download
-nssm install CaoImServer "C:\Program Files\Java\jdk-17\bin\java.exe" "-jar C:\cao-im-server\im-boot-1.0.0.jar"
+nssm install CaoImServer "C:\Program Files\Java\jdk-17\bin\java.exe" "-jar C:\cao-im-server\cao-im.jar"
 nssm set CaoImServer AppDirectory "C:\cao-im-server"
 nssm set CaoImServer AppStdout "C:\cao-im-server\logs\service.log"
 nssm set CaoImServer AppStderr "C:\cao-im-server\logs\service-error.log"
@@ -486,7 +486,7 @@ JAVA_OPTS="-Xms256m -Xmx512m"
 ./bin/caoim-server.sh stop
 
 # 2. 替换 JAR 文件
-cp new-version.jar im-boot-1.0.0.jar
+cp new-version.jar cao-im.jar
 
 # 3. 重启服务
 ./bin/caoim-server.sh start
