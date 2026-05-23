@@ -1,12 +1,14 @@
 package com.caoim.imserver.controller;
 
 import com.caoim.imcore.common.Result;
+import com.caoim.imserver.common.UserContext;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.RegisterDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -48,7 +50,11 @@ public class UserController {
 
     @Operation(summary = "搜索用户")
     @GetMapping("/search")
-    public Result<List<User>> searchUsers(@RequestParam("keyword") String keyword, @RequestParam("userId") Long userId) {
-        return Result.success(userService.searchUsers(keyword, userId));
+    public Result<List<User>> searchUsers(
+            @RequestParam("keyword") String keyword,
+            HttpServletRequest request) {
+        Long currentUserId = UserContext.getCurrentUserId(request);
+        String currentUsername = UserContext.getCurrentUsername(request);
+        return Result.success(userService.searchUsers(keyword, currentUserId, currentUsername));
     }
 }

@@ -99,14 +99,25 @@ public class UserService {
         return userMapper.selectById(userId) != null;
     }
 
-    public List<User> searchUsers(String keyword, Long currentUserId) {
+    public List<User> searchUsers(String keyword, Long currentUserId, String currentUsername) {
+        if (currentUsername == null || currentUsername.isEmpty()) {
+            if (currentUserId != null) {
+                User currentUser = userMapper.selectById(currentUserId);
+                if (currentUser != null) {
+                    currentUsername = currentUser.getUsername();
+                }
+            }
+        }
+
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(w -> w
                 .like(User::getUsername, keyword)
                 .or()
                 .like(User::getNickname, keyword)
         );
-        wrapper.ne(User::getId, currentUserId);
+        if (currentUsername != null && !currentUsername.isEmpty()) {
+            wrapper.ne(User::getUsername, currentUsername);
+        }
         wrapper.select(User.class, info -> !info.getColumn().equals("password"));
         return userMapper.selectList(wrapper);
     }
