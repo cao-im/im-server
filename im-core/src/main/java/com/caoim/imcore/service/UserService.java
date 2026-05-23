@@ -10,7 +10,6 @@ import com.caoim.imcore.dto.RegisterDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -23,7 +22,6 @@ public class UserService {
 
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public Map<String, Object> register(RegisterDTO dto) {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
@@ -34,7 +32,6 @@ public class UserService {
 
         User user = new User();
         user.setUsername(dto.getUsername());
-        user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setNickname(dto.getNickname() != null ? dto.getNickname() : dto.getUsername());
         user.setStatus(Constants.UserStatus.OFFLINE);
         userMapper.insert(user);
@@ -54,9 +51,6 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
-        if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-            throw new BusinessException(ErrorCode.PASSWORD_ERROR);
-        }
 
         user.setStatus(Constants.UserStatus.ONLINE);
         userMapper.updateById(user);
@@ -73,18 +67,13 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
-        user.setPassword(null);
         return user;
     }
 
     public User findByUsername(String username) {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(User::getUsername, username);
-        User user = userMapper.selectOne(wrapper);
-        if (user != null) {
-            user.setPassword(null);
-        }
-        return user;
+        return userMapper.selectOne(wrapper);
     }
 
     public void updateStatus(Long userId, Integer status) {
@@ -118,7 +107,6 @@ public class UserService {
         if (currentUsername != null && !currentUsername.isEmpty()) {
             wrapper.ne(User::getUsername, currentUsername);
         }
-        wrapper.select(User.class, info -> !info.getColumn().equals("password"));
         return userMapper.selectList(wrapper);
     }
 }
