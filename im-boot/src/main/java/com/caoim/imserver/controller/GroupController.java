@@ -22,13 +22,13 @@ public class GroupController {
 
     @Operation(summary = "创建群组")
     @PostMapping("/create")
-    public Result<Group> createGroup(@RequestParam Long ownerId, @RequestBody GroupCreateDTO dto) {
+    public Result<Group> createGroup(@RequestParam("ownerId") Long ownerId, @RequestBody GroupCreateDTO dto) {
         return Result.success(groupService.createGroup(ownerId, dto));
     }
 
     @Operation(summary = "获取用户的群组列表")
     @GetMapping("/list")
-    public Result<List<Group>> getUserGroups(@RequestParam Long userId) {
+    public Result<List<Group>> getUserGroups(@RequestParam("userId") Long userId) {
         return Result.success(groupService.getUserGroups(userId));
     }
 
@@ -42,8 +42,8 @@ public class GroupController {
     @PostMapping("/{groupId}/member")
     public Result<Void> addMember(
             @PathVariable Long groupId,
-            @RequestParam Long userId,
-            @RequestParam Long operatorId) {
+            @RequestParam("userId") Long userId,
+            @RequestParam("operatorId") Long operatorId) {
         groupService.addMember(groupId, userId, operatorId);
         return Result.success();
     }
@@ -53,7 +53,7 @@ public class GroupController {
     public Result<Void> removeMember(
             @PathVariable Long groupId,
             @PathVariable Long userId,
-            @RequestParam Long operatorId) {
+            @RequestParam("operatorId") Long operatorId) {
         groupService.removeMember(groupId, userId, operatorId);
         return Result.success();
     }
@@ -68,8 +68,8 @@ public class GroupController {
     @PutMapping("/{groupId}")
     public Result<Void> updateGroupInfo(
             @PathVariable Long groupId,
-            @RequestParam(required = false) String name,
-            @RequestParam(required = false) String avatar) {
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "avatar", required = false) String avatar) {
         groupService.updateGroupInfo(groupId, name, avatar);
         return Result.success();
     }

@@ -37,10 +37,10 @@ public class MessageController {
     @Operation(summary = "获取私聊历史消息")
     @GetMapping("/private/{targetId}")
     public Result<Page<Message>> getPrivateMessages(
-            @RequestParam Long userId,
+            @RequestParam("userId") Long userId,
             @PathVariable Long targetId,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
         return Result.success(messageService.getPrivateMessages(userId, targetId, page, size));
     }
 
@@ -48,8 +48,8 @@ public class MessageController {
     @GetMapping("/group/{groupId}")
     public Result<Page<Message>> getGroupMessages(
             @PathVariable Long groupId,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
         return Result.success(messageService.getGroupMessages(groupId, page, size));
     }
 
@@ -62,7 +62,7 @@ public class MessageController {
 
     @Operation(summary = "获取未读消息数")
     @GetMapping("/unread/count")
-    public Result<Long> getUnreadCount(@RequestParam Long userId) {
+    public Result<Long> getUnreadCount(@RequestParam("userId") Long userId) {
         return Result.success(messageService.getUnreadCount(userId));
     }
 }

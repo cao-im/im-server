@@ -14,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -96,5 +97,17 @@ public class UserService {
     public boolean existsById(Long userId) {
         if (userId == null) return false;
         return userMapper.selectById(userId) != null;
+    }
+
+    public List<User> searchUsers(String keyword, Long currentUserId) {
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.and(w -> w
+                .like(User::getUsername, keyword)
+                .or()
+                .like(User::getNickname, keyword)
+        );
+        wrapper.ne(User::getId, currentUserId);
+        wrapper.select(User.class, info -> !info.getColumn().equals("password"));
+        return userMapper.selectList(wrapper);
     }
 }

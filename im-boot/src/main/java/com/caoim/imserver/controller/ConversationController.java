@@ -20,20 +20,20 @@ public class ConversationController {
 
     @Operation(summary = "获取会话列表")
     @GetMapping("/list")
-    public Result<List<Conversation>> getConversations(@RequestParam Long userId) {
+    public Result<List<Conversation>> getConversations(@RequestParam("userId") Long userId) {
         return Result.success(conversationService.getConversations(userId));
     }
 
     @Operation(summary = "清除未读数")
     @PutMapping("/read")
-    public Result<Void> clearUnreadCount(@RequestParam Long userId, @RequestParam Long targetId) {
+    public Result<Void> clearUnreadCount(@RequestParam("userId") Long userId, @RequestParam("targetId") Long targetId) {
         conversationService.clearUnreadCount(userId, targetId);
         return Result.success();
     }
 
     @Operation(summary = "删除会话")
     @DeleteMapping("/{targetId}")
-    public Result<Void> deleteConversation(@RequestParam Long userId, @PathVariable Long targetId) {
+    public Result<Void> deleteConversation(@RequestParam("userId") Long userId, @PathVariable Long targetId) {
         conversationService.deleteConversation(userId, targetId);
         return Result.success();
     }

@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @Tag(name = "用户管理")
@@ -40,8 +41,14 @@ public class UserController {
 
     @Operation(summary = "更新在线状态")
     @PutMapping("/status")
-    public Result<Void> updateStatus(@RequestParam Long userId, @RequestParam Integer status) {
+    public Result<Void> updateStatus(@RequestParam("userId") Long userId, @RequestParam("status") Integer status) {
         userService.updateStatus(userId, status);
         return Result.success();
+    }
+
+    @Operation(summary = "搜索用户")
+    @GetMapping("/search")
+    public Result<List<User>> searchUsers(@RequestParam("keyword") String keyword, @RequestParam("userId") Long userId) {
+        return Result.success(userService.searchUsers(keyword, userId));
     }
 }
