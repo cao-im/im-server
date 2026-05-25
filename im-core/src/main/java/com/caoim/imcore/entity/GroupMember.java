@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Data
 @TableName("im_group_member")
 public class GroupMember {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long groupId;
     private Long userId;

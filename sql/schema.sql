@@ -1,9 +1,13 @@
 -- ============================================================
 -- IM系统数据库初始化脚本（完整优化版）
 -- 数据库: cao_im_db
--- 版本: v2.0
--- 更新时间: 2026-05-23
+-- 版本: v3.0
+-- 更新时间: 2026-05-25
 -- 说明: 生产级IM数据库设计，支持私聊、群聊、消息撤回、已读回执等功能
+-- ID策略: 全局使用雪花算法(Snowflake)生成分布式唯一ID
+--       - 64位Long类型，全局唯一且趋势递增
+--       - 支持分布式部署，无单点瓶颈
+--       - 隐藏业务数据量，提升安全性
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS cao_im_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -13,7 +17,7 @@ USE cao_im_db;
 -- 1. 用户表（IM用户，与业务用户分离）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_user (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
+    id BIGINT PRIMARY KEY COMMENT '用户ID(雪花算法生成)',
     username VARCHAR(50) NOT NULL UNIQUE COMMENT 'IM用户名',
     nickname VARCHAR(50) DEFAULT '' COMMENT '昵称',
     avatar VARCHAR(255) DEFAULT '' COMMENT '头像URL',
@@ -36,7 +40,7 @@ CREATE TABLE IF NOT EXISTS im_user (
 -- 2. 消息表（核心表，支持多种消息类型）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_message (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID',
+    id BIGINT PRIMARY KEY COMMENT '消息ID(雪花算法生成)',
     msg_seq BIGINT NOT NULL COMMENT '消息序号(用于排序和去重)',
     from_id BIGINT NOT NULL COMMENT '发送者ID',
     to_id BIGINT DEFAULT NULL COMMENT '接收者ID(私聊时使用)',
@@ -61,7 +65,7 @@ CREATE TABLE IF NOT EXISTS im_message (
 -- 3. 会话表（用户会话列表）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_conversation (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '会话ID',
+    id BIGINT PRIMARY KEY COMMENT '会话ID(雪花算法生成)',
     user_id BIGINT NOT NULL COMMENT '用户ID(会话所属者)',
     target_id BIGINT NOT NULL COMMENT '目标ID(对方用户ID或群组ID)',
     conversation_type TINYINT NOT NULL COMMENT '会话类型: 1-私聊, 2-群聊',
@@ -84,7 +88,7 @@ CREATE TABLE IF NOT EXISTS im_conversation (
 -- 4. 群组表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '群组ID',
+    id BIGINT PRIMARY KEY COMMENT '群组ID(雪花算法生成)',
     name VARCHAR(100) NOT NULL COMMENT '群组名称',
     avatar VARCHAR(255) DEFAULT '' COMMENT '群组头像URL',
     introduction VARCHAR(500) DEFAULT '' COMMENT '群公告',
@@ -104,7 +108,7 @@ CREATE TABLE IF NOT EXISTS im_group (
 -- 5. 群成员表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group_member (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '成员记录ID',
+    id BIGINT PRIMARY KEY COMMENT '成员记录ID(雪花算法生成)',
     group_id BIGINT NOT NULL COMMENT '群组ID',
     user_id BIGINT NOT NULL COMMENT '用户ID',
     nickname VARCHAR(50) DEFAULT '' COMMENT '群内昵称',
@@ -123,7 +127,7 @@ CREATE TABLE IF NOT EXISTS im_group_member (
 -- 6. 好友关系表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_friend (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '好友关系ID',
+    id BIGINT PRIMARY KEY COMMENT '好友关系ID(雪花算法生成)',
     user_id BIGINT NOT NULL COMMENT '用户ID',
     friend_id BIGINT NOT NULL COMMENT '好友ID',
     remark VARCHAR(50) DEFAULT '' COMMENT '好友备注',
@@ -141,7 +145,7 @@ CREATE TABLE IF NOT EXISTS im_friend (
 -- 7. 黑名单表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_blacklist (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '记录ID',
+    id BIGINT PRIMARY KEY COMMENT '记录ID(雪花算法生成)',
     user_id BIGINT NOT NULL COMMENT '用户ID',
     blocked_user_id BIGINT NOT NULL COMMENT '被拉黑的用户ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '拉黑时间',
@@ -153,7 +157,7 @@ CREATE TABLE IF NOT EXISTS im_blacklist (
 -- 8. 消息附件表（文件、图片、语音、视频等）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_attachment (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '附件ID',
+    id BIGINT PRIMARY KEY COMMENT '附件ID(雪花算法生成)',
     msg_id BIGINT NOT NULL COMMENT '关联的消息ID',
     file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
     file_url VARCHAR(500) NOT NULL COMMENT '文件访问URL',
@@ -175,7 +179,7 @@ CREATE TABLE IF NOT EXISTS im_attachment (
 -- 9. 消息已读回执表（主要用于群聊场景）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_message_read (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '记录ID',
+    id BIGINT PRIMARY KEY COMMENT '记录ID(雪花算法生成)',
     msg_id BIGINT NOT NULL COMMENT '消息ID',
     user_id BIGINT NOT NULL COMMENT '已读用户ID',
     group_id BIGINT DEFAULT NULL COMMENT '群组ID(群聊消息必填)',
@@ -189,7 +193,7 @@ CREATE TABLE IF NOT EXISTS im_message_read (
 -- 10. 操作日志表（安全审计）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_operation_log (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '日志ID',
+    id BIGINT PRIMARY KEY COMMENT '日志ID(雪花算法生成)',
     user_id BIGINT NOT NULL COMMENT '操作用户ID',
     operation VARCHAR(50) NOT NULL COMMENT '操作类型: LOGIN/LOGOUT/SEND_MSG/DELETE_MSG/CREATE_GROUP/KICK_MEMBER等',
     target_type VARCHAR(20) DEFAULT NULL COMMENT '目标类型: USER/GROUP/MESSAGE/FRIEND',
@@ -209,7 +213,7 @@ CREATE TABLE IF NOT EXISTS im_operation_log (
 -- 11. 群消息免打扰用户表（细粒度控制）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group_mute (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '记录ID',
+    id BIGINT PRIMARY KEY COMMENT '记录ID(雪花算法生成)',
     group_id BIGINT NOT NULL COMMENT '群组ID',
     user_id BIGINT NOT NULL COMMENT '用户ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '设置时间',
