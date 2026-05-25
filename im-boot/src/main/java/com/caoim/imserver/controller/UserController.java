@@ -35,7 +35,17 @@ public class UserController {
         return Result.success(userService.login(dto));
     }
 
-    @Operation(summary = "获取用户信息")
+    @Operation(summary = "获取当前登录用户信息")
+    @GetMapping("/info")
+    public Result<User> getCurrentUserInfo(HttpServletRequest request) {
+        Long userId = UserContext.getCurrentUserId(request);
+        if (userId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        return Result.success(userService.getUserInfo(userId));
+    }
+
+    @Operation(summary = "获取用户信息(通过ID)")
     @GetMapping("/info/{userId}")
     public Result<User> getUserInfo(@PathVariable Long userId) {
         return Result.success(userService.getUserInfo(userId));

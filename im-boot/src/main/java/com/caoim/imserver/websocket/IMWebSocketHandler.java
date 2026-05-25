@@ -125,16 +125,11 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
             log.info("处理群聊消息: fromId={}, groupId={}, content={}", fromId, groupId, content);
 
-            // 调用消息服务（会保存消息 + 发布事件，由 Listener 负责推送）
             Message message = messageService.sendMessage(fromId, null, groupId, content, msgType);
 
-            log.info("群消息已保存并发布推送事件: messageId={}, groupId={}", 
+            log.info("群消息已保存并发布推送事件: messageId={}, groupId={}",
                     message.getId(), groupId);
-            
-            // 注意：不再在这里直接广播！
-            // 推送逻辑统一由 WebSocketMessageListener (MessageSentEvent) 处理
-            // 这样可以避免重复推送问题
-            
+
         } catch (BusinessException e) {
             log.error("群聊消息发送失败: {}", e.getMessage());
             WebSocketSession fromSession = USER_SESSIONS.get(fromId);
