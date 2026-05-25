@@ -196,8 +196,22 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         ));
 
         pushMessageToUser(toId, message);
-        
+
         sendSendConfirmation(fromId, messageData);
+    }
+
+    public void pushFriendRequest(Long fromId, Long toId) {
+        String message = JSON.toJSONString(Map.of(
+                "type", "friend_request",
+                "data", Map.of(
+                        "fromId", fromId,
+                        "toId", toId,
+                        "timestamp", System.currentTimeMillis()
+                )
+        ));
+
+        log.info("推送好友请求通知: fromId={}, toId={}", fromId, toId);
+        pushMessageToUser(toId, message);
     }
 
     public void pushGroupMessage(Long fromId, Long groupId, Object messageData) {

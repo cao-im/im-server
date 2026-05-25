@@ -2,6 +2,7 @@ package com.caoim.imcore.client;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.caoim.imcore.common.Result;
+import com.caoim.imcore.dto.FriendDTO;
 import com.caoim.imcore.dto.GroupCreateDTO;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.MessageSendDTO;
@@ -93,7 +94,7 @@ public interface ImFeignClient {
     Result<Void> rejectFriendRequest(@RequestParam("userId") Long userId, @RequestParam("friendId") Long friendId);
 
     @GetMapping("/friend/list")
-    Result<List<Friend>> getFriends(@RequestParam("userId") Long userId);
+    Result<List<FriendDTO>> getFriends(@RequestParam("userId") Long userId);
 
     @DeleteMapping("/friend/delete")
     Result<Void> deleteFriend(@RequestParam("userId") Long userId, @RequestParam("friendId") Long friendId);

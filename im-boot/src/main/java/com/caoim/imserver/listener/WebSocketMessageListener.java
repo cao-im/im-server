@@ -1,5 +1,6 @@
 package com.caoim.imserver.listener;
 
+import com.caoim.imcore.event.FriendRequestEvent;
 import com.caoim.imcore.event.MessageSentEvent;
 import com.caoim.imserver.websocket.IMWebSocketHandler;
 import lombok.RequiredArgsConstructor;
@@ -36,5 +37,12 @@ public class WebSocketMessageListener {
                     event.getMessage()
             );
         }
+    }
+
+    @EventListener
+    public void onFriendRequest(FriendRequestEvent event) {
+        log.info("收到好友请求事件: fromId={}, toId={}", event.getFromId(), event.getToId());
+
+        webSocketHandler.pushFriendRequest(event.getFromId(), event.getToId());
     }
 }

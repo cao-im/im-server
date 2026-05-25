@@ -2,6 +2,7 @@ package com.caoim.imcore.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.caoim.imcore.api.ImService;
+import com.caoim.imcore.dto.FriendDTO;
 import com.caoim.imcore.entity.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -112,7 +113,7 @@ public class ImServiceImpl implements ImService {
     }
 
     @Override
-    public List<Friend> getFriends(Long userId) {
+    public List<FriendDTO> getFriends(Long userId) {
         return friendService.getFriends(userId);
     }
 

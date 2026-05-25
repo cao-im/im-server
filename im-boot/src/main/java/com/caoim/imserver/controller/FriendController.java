@@ -1,6 +1,8 @@
 package com.caoim.imserver.controller;
 
 import com.caoim.imcore.common.Result;
+import com.caoim.imcore.dto.FriendDTO;
+import com.caoim.imcore.dto.FriendRequestDTO;
 import com.caoim.imserver.common.UserContext;
 import com.caoim.imcore.entity.Friend;
 import com.caoim.imcore.entity.User;
@@ -46,14 +48,21 @@ public class FriendController {
 
     @Operation(summary = "获取好友列表")
     @GetMapping("/list")
-    public Result<List<Friend>> getFriends(@RequestParam("userId") Long userId) {
+    public Result<List<FriendDTO>> getFriends(@RequestParam("userId") Long userId) {
         return Result.success(friendService.getFriends(userId));
     }
 
     @Operation(summary = "获取待处理的好友请求")
     @GetMapping("/requests")
-    public Result<List<Friend>> getPendingRequests(@RequestParam("userId") Long userId) {
+    public Result<List<FriendRequestDTO>> getPendingRequests(@RequestParam("userId") Long userId) {
         return Result.success(friendService.getPendingRequests(userId));
+    }
+
+    @Operation(summary = "检查好友状态")
+    @GetMapping("/check-status")
+    public Result<Integer> checkFriendStatus(@RequestParam("userId") Long userId, @RequestParam("friendId") Long friendId) {
+        int status = friendService.checkFriendStatus(userId, friendId);
+        return Result.success(status);
     }
 
     @Operation(summary = "删除好友")
