@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Data
 @TableName("im_conversation")
 public class Conversation {
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
     private Long targetId;
