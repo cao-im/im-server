@@ -7,6 +7,7 @@ import com.caoim.imcore.common.ErrorCode;
 import com.caoim.imcore.dao.UserMapper;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.RegisterDTO;
+import com.caoim.imcore.dto.UserSearchDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -107,6 +108,7 @@ public class UserService {
         if (currentUsername != null && !currentUsername.isEmpty()) {
             wrapper.ne(User::getUsername, currentUsername);
         }
+
         return userMapper.selectList(wrapper);
     }
 }

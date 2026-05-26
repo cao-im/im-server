@@ -4,6 +4,7 @@ import com.caoim.imcore.common.Result;
 import com.caoim.imserver.common.UserContext;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.RegisterDTO;
+import com.caoim.imcore.dto.UserSearchDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,11 +61,17 @@ public class UserController {
 
     @Operation(summary = "搜索用户")
     @GetMapping("/search")
-    public Result<List<User>> searchUsers(
+    public Result<List<UserSearchDTO>> searchUsers(
             @RequestParam("keyword") String keyword,
             HttpServletRequest request) {
         Long currentUserId = UserContext.getCurrentUserId(request);
         String currentUsername = UserContext.getCurrentUsername(request);
-        return Result.success(userService.searchUsers(keyword, currentUserId, currentUsername));
+        
+        List<User> users = userService.searchUsers(keyword, currentUserId, currentUsername);
+        List<UserSearchDTO> result = new java.util.ArrayList<>();
+        for (User user : users) {
+            result.add(UserSearchDTO.fromEntity(user));
+        }
+        return Result.success(result);
     }
 }

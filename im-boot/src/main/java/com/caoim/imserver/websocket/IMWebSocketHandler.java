@@ -15,6 +15,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -179,8 +180,19 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     public void pushMessageToUser(Long userId, String message) {
         WebSocketSession session = USER_SESSIONS.get(userId);
+
+        log.debug("尝试推送消息给用户 {}: 在线={}, session={}",
+                userId,
+                session != null && session.isOpen(),
+                session != null ? session.getId() : "null");
+
         if (session != null && session.isOpen()) {
             sendToUser(session, message);
+            log.info("✅ 消息已成功推送给用户 {}", userId);
+        } else {
+            log.warn("⚠️ 用户 {} 不在线或连接已断开，消息无法实时推送 (当前在线用户数: {})",
+                    userId, USER_SESSIONS.size());
+            log.warn("当前在线用户列表: {}", USER_SESSIONS.keySet());
         }
     }
 
@@ -207,6 +219,36 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
         log.info("推送好友请求通知: fromId={}, toId={}", fromId, toId);
         pushMessageToUser(toId, message);
+    }
+
+    public void pushFriendAccepted(Long userId, Long friendId) {
+        String message = JSON.toJSONString(Map.of(
+                "type", "friend_accepted",
+                "data", Map.of(
+                        "fromId", userId,
+                        "toId", friendId,
+                        "timestamp", System.currentTimeMillis()
+                )
+        ));
+
+        log.info("推送好友接受通知: userId={}, friendId={}", userId, friendId);
+
+        pushMessageToUser(friendId, message);
+    }
+
+    public void pushFriendRejected(Long userId, Long friendId) {
+        String message = JSON.toJSONString(Map.of(
+                "type", "friend_rejected",
+                "data", Map.of(
+                        "fromId", userId,
+                        "toId", friendId,
+                        "timestamp", System.currentTimeMillis()
+                )
+        ));
+
+        log.info("推送好友拒绝通知: userId={}, friendId={}", userId, friendId);
+
+        pushMessageToUser(friendId, message);
     }
 
     public void pushGroupMessage(Long fromId, Long groupId, Object messageData) {
@@ -276,5 +318,13 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     public int getOnlineCount() {
         return redisWebSocketService.getOnlineCount();
+    }
+
+    public int getOnlineUserCount() {
+        return USER_SESSIONS.size();
+    }
+
+    public Set<Long> getOnlineUserIds() {
+        return USER_SESSIONS.keySet();
     }
 }

@@ -1,5 +1,7 @@
 package com.caoim.imserver.listener;
 
+import com.caoim.imcore.event.FriendAcceptedEvent;
+import com.caoim.imcore.event.FriendRejectedEvent;
 import com.caoim.imcore.event.FriendRequestEvent;
 import com.caoim.imcore.event.MessageSentEvent;
 import com.caoim.imserver.websocket.IMWebSocketHandler;
@@ -44,5 +46,19 @@ public class WebSocketMessageListener {
         log.info("收到好友请求事件: fromId={}, toId={}", event.getFromId(), event.getToId());
 
         webSocketHandler.pushFriendRequest(event.getFromId(), event.getToId());
+    }
+
+    @EventListener
+    public void onFriendAccepted(FriendAcceptedEvent event) {
+        log.info("好友请求已被接受: userId={}, friendId={}", event.getUserId(), event.getFriendId());
+
+        webSocketHandler.pushFriendAccepted(event.getUserId(), event.getFriendId());
+    }
+
+    @EventListener
+    public void onFriendRejected(FriendRejectedEvent event) {
+        log.info("好友请求已被拒绝: userId={}, friendId={}", event.getUserId(), event.getFriendId());
+
+        webSocketHandler.pushFriendRejected(event.getUserId(), event.getFriendId());
     }
 }

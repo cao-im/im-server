@@ -10,6 +10,8 @@ import com.caoim.imcore.dto.FriendDTO;
 import com.caoim.imcore.dto.FriendRequestDTO;
 import com.caoim.imcore.entity.Friend;
 import com.caoim.imcore.entity.User;
+import com.caoim.imcore.event.FriendAcceptedEvent;
+import com.caoim.imcore.event.FriendRejectedEvent;
 import com.caoim.imcore.event.FriendRequestEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -94,6 +96,8 @@ public class FriendService {
             newFriend.setStatus(Constants.FriendStatus.ACCEPTED);
             friendMapper.insert(newFriend);
         }
+
+        eventPublisher.publishEvent(new FriendAcceptedEvent(this, userId, friendId));
     }
 
     public void acceptRequest(Long userId, Long friendId) {
@@ -113,6 +117,8 @@ public class FriendService {
 
         request.setStatus(Constants.FriendStatus.REJECTED);
         friendMapper.updateById(request);
+
+        eventPublisher.publishEvent(new FriendRejectedEvent(this, userId, friendId));
     }
 
     public void rejectRequest(Long userId, Long friendId) {
@@ -127,19 +133,8 @@ public class FriendService {
 
         List<FriendDTO> result = new ArrayList<>();
         for (Friend friend : friends) {
-            FriendDTO dto = new FriendDTO();
-            dto.setId(friend.getId());
-            dto.setFriendId(friend.getFriendId());
-            dto.setStatus(friend.getStatus());
-
             User friendUser = userMapper.selectById(friend.getFriendId());
-            if (friendUser != null) {
-                dto.setUsername(friendUser.getUsername());
-                dto.setNickname(friendUser.getNickname());
-                dto.setAvatar(friendUser.getAvatar());
-            }
-
-            result.add(dto);
+            result.add(FriendDTO.fromEntity(friend, friendUser));
         }
         return result;
     }
@@ -173,28 +168,9 @@ public class FriendService {
                 acceptedPairs.add(pairKey);
             }
 
-            FriendRequestDTO dto = new FriendRequestDTO();
-            dto.setId(friend.getId());
-            dto.setUserId(friend.getUserId());
-            dto.setFriendId(friend.getFriendId());
-            dto.setStatus(friend.getStatus());
-            dto.setCreateTime(friend.getCreateTime());
-
-            User user = userMapper.selectById(friend.getUserId());
-            if (user != null) {
-                dto.setUsername(user.getUsername());
-                dto.setNickname(user.getNickname());
-                dto.setAvatar(user.getAvatar());
-            }
-
-            User friendUser = userMapper.selectById(friend.getFriendId());
-            if (friendUser != null) {
-                dto.setFriendUsername(friendUser.getUsername());
-                dto.setFriendNickname(friendUser.getNickname());
-                dto.setFriendAvatar(friendUser.getAvatar());
-            }
-
-            result.add(dto);
+            User fromUser = userMapper.selectById(friend.getUserId());
+            User toUser = userMapper.selectById(friend.getFriendId());
+            result.add(FriendRequestDTO.fromEntity(friend, fromUser, toUser));
         }
 
         return result;
