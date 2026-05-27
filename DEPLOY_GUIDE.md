@@ -76,13 +76,16 @@ cat > "$RELEASE_DIR/README.txt" << 'EOF'
   ./bin/caoim-server.sh logs
 
 服务地址:
-  HTTP API: http://localhost:8081/api
-  健康检查: http://localhost:8081/api/health
-  API文档: http://localhost:8081/api/swagger-ui.html
-  WebSocket: ws://localhost:8081/api/ws?token=xxx
+  HTTP API: http://localhost:8080/api
+  健康检查: http://localhost:8080/api/health
+  API文档: http://localhost:8080/api/swagger-ui.html
+  WebSocket: ws://localhost:8080/api/ws?token=xxx
 
 配置文件:
-  config/application.yml (首次使用请修改数据库密码)
+  config/application.yml (首次使用请修改数据库密码和端口号)
+
+端口配置:
+  默认端口为8080，可在config/application.yml的server.port中修改
 
 初始化数据库:
   mysql -u root -p < schema.sql
@@ -147,8 +150,8 @@ chmod +x bin/caoim-server.sh
 # [INFO] 正在启动 cao-im-server ...
 # ✓ cao-im-server 启动成功! (PID: 12345)
 # 日志文件: ./logs/console.log
-# 健康检查: http://localhost:8081/api/health
-# API文档: http://localhost:8081/api/swagger-ui.html
+# 健康检查: http://localhost:8080/api/health  （端口号以配置文件为准）
+# API文档: http://localhost:8080/api/swagger-ui.html
 ```
 
 #### Windows：
@@ -240,8 +243,8 @@ bin\caoim-server.bat help
   ✓ cao-im-server 启动成功!
   PID: 12345
   日志文件: ./logs/console.log
-  健康检查: http://localhost:8081/api/health
-  API文档: http://localhost:8081/api/swagger-ui.html
+  健康检查: http://localhost:8080/api/health  （端口号以配置为准）
+  API文档: http://localhost:8080/api/swagger-ui.html
 ========================================
 ```
 
@@ -274,34 +277,164 @@ release/cao-im-server-1.0.0/
 
 ## ⚙️ 五、生产环境配置建议
 
-### 1. 修改配置文件
+### 0️⃣ 外部配置文件机制（重要！⭐）
 
-编辑 `config/application.yml`：
+曹操IM采用**外部配置文件**机制，打包后**无需重新编译**即可修改所有配置！
 
+#### 📁 配置文件位置说明
+
+```
+发布包目录/
+├── cao-im.jar              # 可执行JAR包（包含默认配置）
+├── config/
+│   └── application.yml     # ★ 外部配置文件（修改这个！）
+├── bin/
+└── logs/
+```
+
+#### ⚙️ 配置加载优先级（从高到低）
+
+| 优先级 | 方式 | 说明 |
+|--------|------|------|
+| **1（最高）** | 启动命令行参数 | `java -jar cao-im.jar --server.port=9090` |
+| **2** | 环境变量 | `SERVER_PORT=9090 java -jar cao-im.jar` |
+| **3（推荐）** | **外部配置文件** | 编辑 `config/application.yml` |
+| **4（最低）** | JAR包内配置 | 默认值，仅作fallback |
+
+> ✅ **推荐使用方式3（外部配置文件）**，修改后重启即可生效，最简单方便！
+
+#### 🔧 使用步骤
+
+**Step 1：首次部署时**
+```bash
+# 发布包中已包含 config/application.yml 模板
+# 直接编辑即可：
+vim config/application.yml   # Linux/Mac
+notepad config\application.yml  # Windows
+```
+
+**Step 2：修改配置项**
 ```yaml
-# 必须修改项
+# config/application.yml
+
+# ✅ 修改端口
+server:
+  port: 8080  # 改成你想要的端口
+
+# ✅ 修改数据库
 spring:
   datasource:
     url: jdbc:mysql://你的数据库IP:3306/cao_im_db?...
-    username: your_db_user
-    password: your_secure_password  # ← 强密码
-  
+    username: your_user
+    password: your_password  # ← 改成你的密码
+
+# ✅ 修改Redis
   data:
     redis:
       host: your_redis_host
       port: 6379
-      password: your_redis_password  # ← 如果有密码
+      password: your_redis_password
 
+# ✅ 修改JWT密钥
 jwt:
-  secret: your-very-long-production-secret-key-at-least-256-bits  # ← 更换密钥
+  secret: your-very-long-secret-key
+```
 
-# 生产环境建议
-server:
-  port: 8081  # 或根据需要修改
+**Step 3：重启服务使配置生效**
+```bash
+./bin/caoim-server.sh restart
+# 或
+bin\caoim-server.bat restart
+```
 
+#### 💡 常见配置场景示例
+
+**场景1：只改端口**
+```bash
+# 方式A：编辑 config/application.yml 的 server.port，然后重启
+
+# 方式B：临时测试（不修改配置文件）
+java -jar cao-im.jar --server.port=9999
+```
+
+**场景2：更换数据库**
+```yaml
+# 编辑 config/application.yml
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.1.100:3306/cao_im_db?...
+    username: prod_user
+    password: Prod@SecurePass2024!
+# 重启服务
+```
+
+**场景3：生产环境关闭Swagger**
+```yaml
+# 编辑 config/application.yml
 springdoc:
   swagger-ui:
-    enabled: false  # 关闭 Swagger UI
+    enabled: false
+# 重启服务
+```
+
+#### ⚠️ 重要提醒
+
+1. **修改IM服务端口后，必须同步更新app-server的配置**
+   ```yaml
+   # app-server/src/main/resources/application.yml
+   im:
+     server:
+       url: http://localhost:{新端口}/api
+   ```
+
+2. **确保端口未被占用**
+   ```bash
+   netstat -tlnp | grep 8080  # Linux
+   netstat -ano | findstr 8080  # Windows
+   ```
+
+3. **防火墙放行**
+   ```bash
+   iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+   ```
+
+4. **推荐的端口范围**
+   - 开发环境：`8080`, `8888`, `9000`
+   - 生产环境：`8080`, `8081`, `8082` 或根据公司规范
+   - 避免使用：`0-1023`（系统保留端口，需要root权限）
+
+5. **配置文件编码**：请确保配置文件使用 **UTF-8** 编码保存
+
+---
+
+### 1️⃣ 端口配置
+
+曹操IM的端口**不再强制锁定**，可以自由配置。默认端口为 **8080**。
+
+#### 修改端口的方法（3种方式）
+
+**方式1：修改外部配置文件（推荐⭐）**
+```yaml
+# 编辑 config/application.yml
+server:
+  port: 8080  # ← 修改为你想要的端口号
+# 保存后重启服务
+```
+
+**方式2：启动命令行参数**
+```bash
+java -jar cao-im.jar --server.port=9090
+```
+
+**方式3：环境变量**
+```bash
+# Linux/Mac
+export SERVER_PORT=9090
+java -jar cao-im.jar
+
+# Windows (PowerShell)
+$env:SERVER_PORT="9090"
+java -jar cao-im.jar
 ```
 
 ### 2. JVM 参数优化
@@ -388,9 +521,9 @@ nssm start CaoImServer
 ### 2. 防火墙配置
 
 ```bash
-# 只开放必要端口（示例）
-iptables -A INPUT -p tcp --dport 8081 -s 允许的IP -j ACCEPT
-iptables -A INPUT -p tcp --dport 8081 -j DROP
+# 只开放必要端口（示例，请将8080替换为实际配置的端口）
+iptables -A INPUT -p tcp --dport 8080 -s 允许的IP -j ACCEPT
+iptables -A INPUT -p tcp --dport 8080 -j DROP
 ```
 
 ### 3. HTTPS 配置（推荐）
@@ -406,7 +539,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8081;
+        proxy_pass http://127.0.0.1:8080;  # ← 修改为实际的IM服务端口
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -431,11 +564,11 @@ server {
 ### 1. 健康检查接口
 
 ```bash
-# 完整健康检查
-curl http://localhost:8081/api/health
+# 完整健康检查（请将8080替换为实际配置的端口）
+curl http://localhost:8080/api/health
 
 # 简易心跳（适合负载均衡器）
-curl http://localhost:8081/api/health/ping
+curl http://localhost:8080/api/health/ping
 ```
 
 ### 2. 监控指标（可集成 Prometheus）
@@ -461,11 +594,14 @@ grep ERROR logs/console.log | tail -100
 
 ### Q1: 端口被占用？
 ```bash
-# 查找占用端口的进程
-netstat -tlnp | grep 8081  # Linux
-netstat -ano | findstr 8081  # Windows
+# 查找占用端口的进程（请将8080替换为你要使用的端口）
+netstat -tlnp | grep 8080  # Linux
+netstat -ano | findstr 8080  # Windows
 
-# 杀掉进程或修改 application.yml 的端口
+# 解决方案（任选其一）:
+# 1. 杀掉占用端口的进程
+# 2. 修改 application.yml 的 server.port 为其他端口
+# 3. 使用启动参数: java -jar cao-im.jar --server.port=其他端口
 ```
 
 ### Q2: 内存不足？
@@ -503,7 +639,7 @@ cp new-version.jar cao-im.jar
 - [ ] 修改 `config/application.yml` 配置
 - [ ] 初始化数据库：`mysql -u root -p < schema.sql`
 - [ ] 启动服务：`./bin/caoim-server.sh start`
-- [ ] 验证健康检查：`curl http://localhost:8081/api/health`
+- [ ] 验证健康检查：`curl http://localhost:8080/api/health` （端口号以配置为准）
 - [ ] 配置防火墙规则
 - [ ] （可选）配置 Nginx 反向代理 + HTTPS
 - [ ] （可选）配置系统服务开机自启
@@ -520,9 +656,9 @@ cp new-version.jar cao-im.jar
 
 如遇问题请检查：
 1. 日志文件：`logs/console.log`
-2. 健康检查：`http://localhost:8081/api/health`
-3. API 文档：`http://localhost:8081/api/swagger-ui.html`（开发环境）
+2. 健康检查：`http://localhost:8080/api/health` （端口号以配置为准）
+3. API 文档：`http://localhost:8080/api/swagger-ui.html`（开发环境，端口号以配置为准）
 
 ---
 
-**🎉 现在您就可以像野火IM一样，通过一个 JAR + 脚本快速部署曹操IM了！**
+**🎉 现在您就可以像野火IM一样，通过一个 JAR + 脚本快速部署曹操IM了！端口可自由配置，默认使用8080端口。**

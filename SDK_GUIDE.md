@@ -249,7 +249,7 @@ public class ImServerHealthCheck {
 
     private static final Logger log = LoggerFactory.getLogger(ImServerHealthCheck.class);
 
-    @Value("${im.server.url:http://localhost:8081}")
+    @Value("${im.server.url:http://localhost:8080}")
     private String imServerUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -288,9 +288,10 @@ public class ImServerHealthCheck {
 
 ```yaml
 # IM服务地址（app-server 配置）
+# 注意：此地址需要与 im-boot 的实际端口一致
 im:
   server:
-    url: http://localhost:8081  # im-boot 服务的地址
+    url: http://localhost:8080/api  # im-boot 服务的地址（默认端口8080，可在im-server的application.yml中修改）
 ```
 
 #### 启动时自动检查示例

@@ -40,22 +40,21 @@ public class HealthController {
         return Result.success("pong");
     }
 
-    @Operation(summary = "获取服务端端口配置信息（SDK连接前必须调用）")
+    @Operation(summary = "获取服务端端口配置信息")
     @GetMapping("/port-info")
     public Result<Map<String, Object>> getPortInfo() {
         Map<String, Object> portInfo = new HashMap<>();
+        int configuredPort = PortBindingValidator.getActualPort();
+
         portInfo.put("port", serverPort);
-        portInfo.put("expectedPort", PortBindingValidator.getExpectedPort());
-        portInfo.put("isPortLocked", serverPort == PortBindingValidator.getExpectedPort());
+        portInfo.put("configuredPort", configuredPort);
+        portInfo.put("isPortMatched", serverPort == configuredPort);
         portInfo.put("buildSignature", PortBindingValidator.getBuildSignature());
         portInfo.put("protocolVersion", PortBindingValidator.getProtocolVersion());
         portInfo.put("fingerprint", System.getProperty("im.server.fingerprint", "unknown"));
         portInfo.put("timestamp", LocalDateTime.now().toString());
-
-        if (serverPort != PortBindingValidator.getExpectedPort()) {
-            portInfo.put("warning", "⚠️ 端口已被修改！SDK客户端可能无法正常连接");
-            portInfo.put("sdkRequiredPort", PortBindingValidator.getExpectedPort());
-        }
+        portInfo.put("portConfigurable", true);
+        portInfo.put("note", "端口可通过 config/application.yml 自由配置");
 
         return Result.success(portInfo);
     }

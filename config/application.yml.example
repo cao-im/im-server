@@ -1,37 +1,26 @@
-# 曹操IM Server 生产环境配置
+# 曹操IM Server 配置文件
 # 复制此文件到 config/application.yml 并根据实际情况修改
 #
-# ⚠️ 重要提示：服务端口已由源码强制锁定为 80（HTTP标准端口）
+# 【端口配置】
+# ✅ 端口已开放，可以自由配置！默认端口为 8080
 #
-# 【为什么强制使用80端口？】
-# - 80 端口是 HTTP 协议的标准端口，无需在 URL 中指定端口号
-# - 用户访问更简洁：http://im.yourdomain.com/api 而非 http://im.yourdomain.com:8080/api
-# - 符合云服务器域名备案规范（域名+80/443端口需要ICP备案）
-# - 避免因端口配置不一致导致客户端连接失败
-# - 后期客户端等增值服务也会强制校验服务端口
+# 【修改端口的方法（3种）】
+# 方式1：修改下方 server.port 的值（推荐）
+# 方式2：启动参数 --server.port=xxxx
+# 方式3：环境变量 SERVER_PORT=xxxx
 #
-# 【部署建议】强烈建议单独使用一台服务器部署 IM 服务！
-# - 80 端口是 Web 服务常用端口，可能与 Nginx/Apache 等冲突
-# - 单独部署可避免端口占用问题
-# - 便于独立扩展和维护
-# - 生产环境建议使用域名 + HTTPS (443端口) 反向代理到本服务
+# 【注意事项】
+# - 修改IM服务端口后，必须同步更新 app-server 的配置
+# - 确保所选端口未被其他程序占用
+# - 生产环境记得在防火墙中放行相应端口
 #
-# 【安全限制】以下方式均无法修改端口：
-# - ✗ 修改此配置文件的 port 值不会生效
-# - ✗ 使用 --server.port 启动参数也不会生效
-# - ✗ 设置 SERVER_PORT 环境变量同样无效
-# - ✗ 这是安全设计，确保 SDK 客户端能正确连接
-#
-# 【如需更改端口】（需要重新编译，不推荐）：
-#   1. 编辑 im-boot/src/main/java/com/caoim/imserver/ImServerApplication.java
-#   2. 修改 FORCED_PORT 常量值
-#   3. 编辑 PortBindingValidator.java 修改 EXPECTED_PORT 和 BUILD_SIGNATURE
-#   4. 同步修改 Flutter SDK 中的 _expectedPort 和 _buildSignature 常量
-#   5. 执行 mvn clean package 重新编译
+# 【推荐的端口】
+# - 开发环境：8080, 8888, 9000
+# - 生产环境：8080, 8081, 8082 或根据公司规范
 
 server:
-  # 端口已锁定为 80，此处仅作参考，实际值由代码强制设定
-  port: 80
+  # IM服务监听端口（可自由修改）
+  port: 8080
   servlet:
     context-path: /api
 
@@ -76,5 +65,5 @@ springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
-    path: /swagger-ui.html
-    enabled: false  # 生产环境建议关闭 Swagger
+    path: /swagger-ui/index.html  # SpringDoc 2.x 标准路径
+    enabled: false  # 生产环境建议关闭 Swagger（开发环境改为 true）

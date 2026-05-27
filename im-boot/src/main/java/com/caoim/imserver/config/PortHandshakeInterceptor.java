@@ -19,27 +19,18 @@ public class PortHandshakeInterceptor implements HandshakeInterceptor {
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) throws Exception {
         int localPort = request.getLocalAddress().getPort();
-        int expectedPort = PortBindingValidator.getExpectedPort();
+        int configuredPort = PortBindingValidator.getActualPort();
 
-        log.info("🤝 WebSocket 握手请求 - 本地端口: {}, 预期端口: {}", localPort, expectedPort);
+        log.info("🤝 WebSocket 握手请求 - 本地端口: {}, 配置端口: {}", localPort, configuredPort);
 
-        if (localPort != expectedPort) {
-            log.error("❌ 握手拒绝: 端口不匹配! 客户端连接到端口 {}, 但服务端锁定为 {}",
-                localPort, expectedPort);
-
-            response.getHeaders().add("X-IM-Error", "PORT_MISMATCH");
-            response.getHeaders().add("X-Expected-Port", String.valueOf(expectedPort));
-            response.getHeaders().add("X-Actual-Port", String.valueOf(localPort));
-
-            return false;
-        }
-
+        // 记录端口信息到属性中，不再强制拒绝连接
         attributes.put("serverFingerprint", System.getProperty("im.server.fingerprint", "unknown"));
         attributes.put("buildSignature", PortBindingValidator.getBuildSignature());
         attributes.put("protocolVersion", PortBindingValidator.getProtocolVersion());
-        attributes.put("confirmedPort", expectedPort);
+        attributes.put("confirmedPort", configuredPort);
+        attributes.put("actualPort", localPort);
 
-        log.info("✅ WebSocket 握手通过 - 端口验证成功: {}", localPort);
+        log.info("✅ WebSocket 握手通过 - 端口: {}", localPort);
         return true;
     }
 

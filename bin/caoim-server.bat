@@ -19,6 +19,11 @@ set CONFIG_FILE=config\application.yml
 :: JVM 参数（可根据服务器配置调整）
 set JAVA_OPTS=-Xms512m -Xmx1024m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./logs/
 
+:: 如果存在外部配置文件，则使用
+if exist "%CONFIG_FILE%" (
+    set JAVA_OPTS=%JAVA_OPTS% --spring.config.location=file:%CONFIG_FILE%
+)
+
 :: 日志目录
 set LOG_DIR=.\logs
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
@@ -220,16 +225,17 @@ echo   bin\caoim-server.bat status    # 查看状态
 echo   bin\caoim-server.bat logs      # 查看日志
 echo.
 echo 配置文件:
-echo   config\application.yml          # 自定义配置（可选）
+echo   config\application.yml          # ★ 外部配置文件（修改这个！）
 echo.
 echo 服务端口:
-echo   HTTP: 80 (标准HTTP端口，不可修改)
-echo   WebSocket: ws://host/api/ws
+echo   默认: 8080（可在 config\application.yml 中修改）
+echo   HTTP: http://host:^{port^}/api
+echo   WebSocket: ws://host:^{port^}/api/ws
 echo.
-echo ⚠️  重要提示:
-echo   - 本服务强制使用 80 端口，无法通过配置修改
-echo   - 建议单独使用一台服务器部署 IM 服务
-echo   - 避免与其他 Web 服务（Nginx/Apache）端口冲突
+echo 💡 使用提示:
+echo   - 修改 config\application.yml 可调整端口、数据库等配置
+echo   - 修改后重启服务即可生效，无需重新打包
+echo   - 推荐单独部署IM服务，避免端口冲突
 echo   - 生产环境建议使用域名 + HTTPS 反向代理
 echo.
 echo ================================================================================

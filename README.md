@@ -62,11 +62,11 @@ mysql -u root -p < src/main/resources/schema.sql
 mvn spring-boot:run
 ```
 
-访问：http://localhost:8081
+访问：http://localhost:8080
 
-- REST API: http://localhost:8081/api
-- Swagger: http://localhost:8081/swagger-ui.html
-- WebSocket: `ws://localhost:8081/api/ws?token=xxx`
+- REST API: http://localhost:8080/api
+- Swagger: http://localhost:8080/swagger-ui.html
+- WebSocket: `ws://localhost:8080/api/ws?token=xxx`
 
 ### 方式二：在项目中引入 im-core JAR
 
@@ -182,7 +182,7 @@ public interface ImService {
 
 ### WebSocket
 ```
-端点: ws://host:8081/api/ws?token=xxx
+端点: ws://host:{port}/api/ws?token=xxx  （{port}为配置的端口号，默认8080）
 消息类型:
   - {type:"private", toId, content, msgType}  私聊
   - {type:"group", groupId, content, msgType}   群聊

@@ -1,8 +1,22 @@
+# ============================================================
+# 曹操IM Server - JAR包内默认配置（开发环境使用）
+# ============================================================
+#
+# ⚠️ 重要提示：
+#    此配置文件打包到JAR包内部，仅作为默认值！
+#
+# 📌 生产环境部署时：
+#    请在JAR包同目录下的 config/application.yml 中修改配置
+#    优先级：config/application.yml > 此文件
+#
+# 🔧 开发调试时：
+#    可直接修改此文件，或使用 --spring.config.location 指定外部配置
+#
+# ============================================================
+
 server:
-  # ⚠️ 端口已由代码强制锁定为 80（见 ImServerApplication.java）
-  # 修改此处的值不会生效，启动时会自动覆盖
-  # 如需更改端口，请修改源码中的 FORCED_PORT 常量并重新编译
-  port: 80
+  # 默认端口（可在 config/application.yml 中覆盖）
+  port: 8080
   servlet:
     context-path: /api
 
@@ -46,5 +60,5 @@ springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
-    path: /swagger-ui.html
+    path: /swagger-ui/index.html  # SpringDoc 2.x 标准路径（开发环境）
     enabled: true
