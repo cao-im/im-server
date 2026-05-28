@@ -14,6 +14,9 @@ import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,6 +73,12 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                     break;
                 case "group":
                     handleGroupMessage(userId, msgMap);
+                    break;
+                case "get_offline_messages":
+                    handleGetOfflineMessages(userId, session, msgMap);
+                    break;
+                case "read_receipt":
+                    handleReadReceipt(userId, session, msgMap);
                     break;
                 case "ping":
                     sendToUser(session, JSON.toJSONString(Map.of("type", "pong")));
@@ -143,6 +152,201 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             if (fromSession != null && fromSession.isOpen()) {
                 sendError(fromSession, "消息发送失败: " + e.getMessage());
             }
+        }
+    }
+
+    /**
+     * 处理离线消息拉取请求
+     * 支持基于时间戳和消息ID的增量同步，分页返回
+     *
+     * @param userId 请求用户ID
+     * @param session WebSocket会话
+     * @param msgMap 请求参数
+     */
+    private void handleGetOfflineMessages(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            // 解析请求参数
+            Long sinceTimestamp = 0L;
+            Long sinceMessageId = 0L;
+            int offset = 0;
+            int limit = 50; // 默认每页50条
+
+            if (msgMap.get("since") != null) {
+                sinceTimestamp = Long.valueOf(msgMap.get("since").toString());
+            }
+
+            if (msgMap.get("sinceMessageId") != null) {
+                sinceMessageId = Long.valueOf(msgMap.get("sinceMessageId").toString());
+            }
+
+            if (msgMap.get("offset") != null) {
+                offset = Integer.valueOf(msgMap.get("offset").toString());
+            }
+
+            if (msgMap.get("limit") != null) {
+                limit = Integer.valueOf(msgMap.get("limit").toString());
+            }
+
+            // 参数校验：限制最大每页数量，防止一次拉取过多
+            if (limit <= 0 || limit > 200) {
+                log.warn("离线消息请求limit参数异常: {}, 使用默认值50", limit);
+                limit = 50;
+            }
+
+            if (offset < 0) {
+                log.warn("离线消息请求offset参数异常: {}, 使用默认值0", offset);
+                offset = 0;
+            }
+
+            log.info("处理离线消息拉取请求: userId={}, sinceTimestamp={}, sinceMessageId={}, offset={}, limit={}",
+                    userId, sinceTimestamp, sinceMessageId, offset, limit);
+
+            // 查询离线消息
+            List<Message> offlineMessages = messageService.getOfflineMessages(
+                    userId,
+                    sinceTimestamp,
+                    sinceMessageId,
+                    offset,
+                    limit
+            );
+
+            // 查询总数（用于判断是否还有更多消息）
+            long totalCount = messageService.getOfflineMessagesCount(
+                    userId,
+                    sinceTimestamp,
+                    sinceMessageId
+            );
+
+            // 构建响应数据
+            List<Map<String, Object>> messagesData = new ArrayList<>();
+            for (Message msg : offlineMessages) {
+                Map<String, Object> msgData = new HashMap<>();
+                msgData.put("id", msg.getId());
+                msgData.put("fromId", msg.getFromId());
+                msgData.put("toId", msg.getToId());
+                msgData.put("groupId", msg.getGroupId());
+
+                // 处理content字段（处理null值）
+                String content = msg.getContent();
+                if (content == null) {
+                    content = "";
+                }
+                msgData.put("content", content);
+
+                msgData.put("msgType", msg.getMsgType());
+                msgData.put("msgStatus", msg.getMsgStatus());
+
+                // 转换时间戳为毫秒（处理null值）
+                if (msg.getCreateTime() != null) {
+                    long timestamp = msg.getCreateTime()
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli();
+                    msgData.put("timestamp", timestamp);
+                } else {
+                    log.warn("消息create_time为null, 使用当前时间: messageId={}", msg.getId());
+                    msgData.put("timestamp", System.currentTimeMillis());
+                }
+
+                messagesData.add(msgData);
+            }
+
+            // 判断是否还有更多数据
+            boolean hasMore = (offset + offlineMessages.size()) < totalCount;
+
+            // 构建响应
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "offline_messages");
+            response.put("messages", messagesData);
+            response.put("count", offlineMessages.size());
+            response.put("totalCount", totalCount);
+            response.put("hasMore", hasMore);
+            response.put("offset", offset);
+            response.put("limit", limit);
+
+            String jsonResponse = JSON.toJSONString(response);
+
+            log.info("离线消息查询结果: userId={}, 返回数量={}, 总数={}, hasMore={}",
+                    userId, offlineMessages.size(), totalCount, hasMore);
+
+            // 发送响应给客户端
+            sendToUser(session, jsonResponse);
+
+        } catch (NumberFormatException e) {
+            log.error("离线消息参数格式错误: ", e);
+            sendError(session, "参数格式错误: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("处理离线消息请求异常: ", e);
+            sendError(session, "获取离线消息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理已读回执（通过WebSocket发送）
+     * 客户端阅读消息后，发送此消息通知服务器
+     *
+     * @param userId 发送回执的用户ID
+     * @param session WebSocket会话
+     * @param msgMap 请求数据
+     */
+    private void handleReadReceipt(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            // 解析消息ID列表
+            Object messageIdsObj = msgMap.get("messageIds");
+            
+            if (messageIdsObj == null) {
+                log.warn("已读回执缺少messageIds参数: userId={}", userId);
+                sendError(session, "已读回执缺少messageIds参数");
+                return;
+            }
+
+            List<Long> messageIds = new ArrayList<>();
+            
+            // 支持两种格式：List 或 单个Long
+            if (messageIdsObj instanceof List) {
+                for (Object id : (List<?>) messageIdsObj) {
+                    if (id instanceof Number) {
+                        messageIds.add(((Number) id).longValue());
+                    } else if (id != null) {
+                        try {
+                            messageIds.add(Long.parseLong(id.toString()));
+                        } catch (NumberFormatException e) {
+                            log.warn("无效的消息ID: {}", id);
+                        }
+                    }
+                }
+            } else if (messageIdsObj instanceof Number) {
+                messageIds.add(((Number) messageIdsObj).longValue());
+            }
+
+            if (messageIds.isEmpty()) {
+                log.warn("已读回执的messageIds为空: userId={}", userId);
+                sendError(session, "消息ID列表不能为空");
+                return;
+            }
+
+            log.info("收到WebSocket已读回执: userId={}, 消息数={}", userId, messageIds.size());
+
+            // 调用完整的markAsRead方法（包含回执记录）
+            messageService.markAsRead(messageIds, userId);
+
+            // 发送确认响应给客户端
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "read_receipt_ack");
+            response.put("success", true);
+            response.put("messageCount", messageIds.size());
+            response.put("timestamp", System.currentTimeMillis());
+
+            sendToUser(session, JSON.toJSONString(response));
+
+            log.info("已读回执处理完成: userId={}, 确认消息数={}", userId, messageIds.size());
+
+        } catch (ClassCastException e) {
+            log.error("已读回执参数格式错误: ", e);
+            sendError(session, "参数格式错误: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("处理已读回执异常: ", e);
+            sendError(session, "处理已读回执失败: " + e.getMessage());
         }
     }
 

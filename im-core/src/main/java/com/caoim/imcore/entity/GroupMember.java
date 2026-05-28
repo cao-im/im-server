@@ -12,7 +12,12 @@ public class GroupMember {
     private Long id;
     private Long groupId;
     private Long userId;
+    private String nickname;
+    private String avatar;
     private Integer role;
+    private Integer mute;
+    private Long lastReadMsgId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime joinTime;
+    private Long inviteUserId;
 }

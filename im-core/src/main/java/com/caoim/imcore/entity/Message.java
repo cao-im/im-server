@@ -10,12 +10,17 @@ import java.time.LocalDateTime;
 public class Message {
     @TableId(type = IdType.AUTO)
     private Long id;
+    private Long msgSeq;
     private Long fromId;
     private Long toId;
     private Long groupId;
     private String content;
     private Integer msgType;
-    private Integer status;
+    /** 消息阅读状态: 0-未读, 1-已读 */
+    private Integer msgStatus;
+    private Long replyMsgId;
+    private String atUserIds;
+    private String extra;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
@@ -28,6 +33,6 @@ public class Message {
         this.groupId = groupId;
         this.content = content;
         this.msgType = msgType;
-        this.status = 0;
+        this.msgStatus = 0;
     }
 }

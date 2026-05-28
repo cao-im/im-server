@@ -3,6 +3,7 @@ package com.caoim.imcore.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -13,6 +14,12 @@ public class User {
     private String username;
     private String nickname;
     private String avatar;
+    private String signature;
+    private Integer gender;
+    private LocalDate birthday;
+    private String location;
+    private Integer onlineStatus;
+    private LocalDateTime lastOnlineTime;
     private Integer status;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
@@ -20,4 +27,7 @@ public class User {
     private LocalDateTime updateTime;
     @TableLogic
     private Integer deleted;
+
+    public User() {
+    }
 }

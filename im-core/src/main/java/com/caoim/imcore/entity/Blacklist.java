@@ -6,17 +6,12 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("im_friend")
-public class Friend {
+@TableName("im_blacklist")
+public class Blacklist {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
-    private Long friendId;
-    private String remark;
-    private Integer status;
-    private String applyMessage;
-    private Integer source;
+    private Long blockedUserId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    private LocalDateTime agreeTime;
 }

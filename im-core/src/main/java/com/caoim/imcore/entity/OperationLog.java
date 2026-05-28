@@ -6,17 +6,18 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("im_friend")
-public class Friend {
+@TableName("im_operation_log")
+public class OperationLog {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
-    private Long friendId;
-    private String remark;
-    private Integer status;
-    private String applyMessage;
-    private Integer source;
+    private String operation;
+    private String targetType;
+    private Long targetId;
+    private String detail;
+    private String ip;
+    private String userAgent;
+    private Integer result;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    private LocalDateTime agreeTime;
 }
