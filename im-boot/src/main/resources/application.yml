@@ -62,3 +62,26 @@ springdoc:
   swagger-ui:
     path: /swagger-ui/index.html  # SpringDoc 2.x 标准路径（开发环境）
     enabled: true
+
+# API 日志配置
+api-log:
+  enabled: true
+  log-headers: true
+  log-params: true
+  log-body: true
+  log-response: true
+  max-body-length: 2000
+  exclude-paths:
+    - /swagger-ui
+    - /v3/api-docs
+    - /api-docs
+    - /static
+    - /favicon
+    - /ws
+
+# 日志级别配置 (开发环境Debug模式)
+logging:
+  level:
+    com.caoim.imcore.config.ApiLogFilter: DEBUG
+    org.springframework.web.filter: DEBUG
+    com.caoim.imserver: DEBUG

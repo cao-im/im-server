@@ -18,6 +18,8 @@ public class User {
     private Integer gender;
     private LocalDate birthday;
     private String location;
+    private String phone;
+    private String email;
     private Integer onlineStatus;
     private LocalDateTime lastOnlineTime;
     private Integer status;

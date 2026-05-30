@@ -95,7 +95,12 @@ public class FriendController {
         List<User> users = userService.searchUsers(keyword, currentUserId, currentUsername);
         List<UserSearchDTO> result = new ArrayList<>();
         for (User user : users) {
-            result.add(UserSearchDTO.fromEntity(user));
+            UserSearchDTO dto = UserSearchDTO.fromEntity(user);
+            if (currentUserId != null) {
+                int friendStatus = friendService.checkFriendStatus(currentUserId, user.getId());
+                dto.setFriendStatus(friendStatus);
+            }
+            result.add(dto);
         }
         return Result.success(result);
     }

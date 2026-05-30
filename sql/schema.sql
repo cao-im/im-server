@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS im_user (
     gender TINYINT DEFAULT 0 COMMENT '性别: 0-未知, 1-男, 2-女',
     birthday DATE DEFAULT NULL COMMENT '生日',
     location VARCHAR(100) DEFAULT '' COMMENT '所在地',
+    phone VARCHAR(20) DEFAULT '' COMMENT '手机号',
+    email VARCHAR(100) DEFAULT '' COMMENT '邮箱',
     online_status TINYINT DEFAULT 0 COMMENT '在线状态: 0-离线, 1-在线, 2-忙碌, 3-隐身',
     last_online_time DATETIME DEFAULT NULL COMMENT '最后在线时间',
     status TINYINT DEFAULT 1 COMMENT '账号状态: 0-禁用, 1-正常',
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS im_user (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_message (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID(自增)',
+    mid BIGINT NOT NULL DEFAULT 0 COMMENT '消息全局唯一ID(雪花算法生成,0表示待分配)',
     msg_seq BIGINT NOT NULL DEFAULT 0 COMMENT '消息序号(用于排序和去重,保证全局有序)',
     from_id BIGINT NOT NULL COMMENT '发送者ID',
     to_id BIGINT DEFAULT NULL COMMENT '接收者ID(私聊时使用,与group_id互斥)',

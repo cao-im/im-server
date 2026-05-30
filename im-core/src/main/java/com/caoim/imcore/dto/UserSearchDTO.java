@@ -4,12 +4,12 @@ import lombok.Data;
 
 @Data
 public class UserSearchDTO {
-    private String id;           // 使用String避免前端精度丢失
+    private String id;
     private String username;
     private String nickname;
     private String avatar;
     private Integer status;
-    private String imUserId;     // IM系统用户ID
+    private Integer friendStatus;
 
     public static UserSearchDTO fromEntity(com.caoim.imcore.entity.User user) {
         UserSearchDTO dto = new UserSearchDTO();
