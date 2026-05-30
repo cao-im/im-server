@@ -8,7 +8,8 @@ import com.caoim.imcore.service.MessageService;
 import com.caoim.imcore.service.UserService;
 import com.caoim.imcore.util.JwtUtil;
 import com.caoim.imserver.service.RedisWebSocketService;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -21,9 +22,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Component
 public class IMWebSocketHandler extends TextWebSocketHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(IMWebSocketHandler.class);
 
     private final MessageService messageService;
     private final UserService userService;

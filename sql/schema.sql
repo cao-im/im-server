@@ -1,26 +1,37 @@
 -- ============================================================
--- IM系统数据库初始化脚本（完整版 v5.0）
+-- IM系统数据库初始化脚本（完整版 v6.0）
 -- 数据库: cao_im_db
--- 版本: v5.0 (完整版)
--- 更新时间: 2026-05-28
+-- 版本: v6.0 (重构好友系统)
+-- 更新时间: 2026-05-31
 -- 说明: 生产级IM数据库设计，支持私聊、群聊、消息撤回、已读回执、
 --       黑名单、文件消息、@提醒、消息回复等完整功能
 --
--- 表清单 (共11张):
+-- 🆕 v6.0 更新内容:
+--   - 重构好友系统：将 im_friend 表拆分为 im_friend_request + im_contact
+--   - 新增好友申请流程表 (im_friend_request)
+--   - 新增联系人/好友关系表 (im_contact) 支持备注、分组、置顶、免打扰
+--   - 废弃旧表 im_friend（如存在将自动备份并提示迁移）
+--
+-- 表清单 (共12张):
 --   1. im_user          - 用户表
 --   2. im_message       - 消息表（核心）
 --   3. im_conversation  - 会话表
 --   4. im_group         - 群组表
 --   5. im_group_member  - 群成员表
---   6. im_friend        - 好友关系表
---   7. im_blacklist     - 黑名单表
---   8. im_attachment    - 消息附件表
---   9. im_message_read  - 消息已读回执表
---   10. im_operation_log- 操作日志表
---   11. im_group_mute   - 群消息免打扰表
+--   6. im_friend_request- 好友申请表 [新增]
+--   7. im_contact       - 联系人表（好友关系）[新增]
+--   8. im_blacklist     - 黑名单表
+--   9. im_attachment    - 消息附件表
+--   10. im_message_read - 消息已读回执表
+--   11. im_operation_log- 操作日志表
+--   12. im_group_mute   - 群消息免打扰表
 --
 -- ID策略: 全局使用数据库自增(AUTO_INCREMENT)
 -- 字符集: utf8mb4 (支持完整Unicode，包括emoji表情)
+--
+-- 执行方式:
+--   mysql -u root -prootlocal < schema.sql
+-- 或在 MySQL 客户端中执行此文件
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS cao_im_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -165,31 +176,56 @@ CREATE TABLE IF NOT EXISTS im_group_member (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群成员表';
 
 -- ============================================================
--- 6. 好友关系表
--- 功能: 存储好友关系，支持备注、申请流程、来源追踪
+-- 6. 好友申请表（存储好友申请流程）
+-- 功能: 存储好友申请、验证消息、状态流转
 -- ============================================================
-CREATE TABLE IF NOT EXISTS im_friend (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '好友关系ID(自增)',
-    user_id BIGINT NOT NULL COMMENT '用户ID(发起方)',
-    friend_id BIGINT NOT NULL COMMENT '好友ID(接受方)',
-    remark VARCHAR(50) DEFAULT '' COMMENT '好友备注(可自定义显示名称)',
-    status TINYINT DEFAULT 0 COMMENT '状态: 0-待验证, 1-已同意, 2-已拒绝, 3-已删除',
-    apply_message VARCHAR(200) DEFAULT '' COMMENT '申请/验证消息(添加好友时的留言)',
+CREATE TABLE IF NOT EXISTS im_friend_request (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '申请记录ID(自增)',
+    from_user_id BIGINT NOT NULL COMMENT '申请人ID(发起方)',
+    to_user_id BIGINT NOT NULL COMMENT '被申请人ID(接收方)',
+    apply_message VARCHAR(200) DEFAULT '' COMMENT '申请留言(添加好友时的留言)',
+    status TINYINT DEFAULT 0 COMMENT '状态: 0-待处理, 1-已同意, 2-已拒绝',
     source TINYINT DEFAULT 0 COMMENT '添加来源: 0-搜索, 1-群聊, 2-二维码, 3-名片分享, 4-通讯录',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
-    agree_time DATETIME DEFAULT NULL COMMENT '同意时间(好友建立时间)',
+    handle_time DATETIME DEFAULT NULL COMMENT '处理时间',
 
-    -- 唯一约束：好友关系唯一（双向存储）
-    UNIQUE KEY uk_user_friend (user_id, friend_id),
+    -- 唯一约束：同一申请人不能重复申请同一人
+    UNIQUE KEY uk_from_to (from_user_id, to_user_id),
 
     -- 索引优化
-    INDEX idx_friend_id (friend_id),
-    INDEX idx_status (user_id, status),                      -- 按状态查询好友
-    INDEX idx_source (source)                                 -- 来源统计
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='好友表';
+    INDEX idx_to_user_id (to_user_id),                        -- 查询收到的申请
+    INDEX idx_status (to_user_id, status),                    -- 按状态查询申请
+    INDEX idx_source (source),                                -- 来源统计
+    INDEX idx_create_time (create_time)                       -- 时间排序
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='好友申请表';
 
 -- ============================================================
--- 7. 黑名单表
+-- 7. 联系人表（存储已建立的好友关系）
+-- 功能: 存储联系人列表，支持备注、分组、置顶等功能
+-- ============================================================
+CREATE TABLE IF NOT EXISTS im_contact (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '联系人记录ID(自增)',
+    user_id BIGINT NOT NULL COMMENT '用户ID(联系人所有者)',
+    contact_user_id BIGINT NOT NULL COMMENT '联系人ID(对方用户)',
+    remark VARCHAR(50) DEFAULT '' COMMENT '备注名(可自定义显示名称)',
+    group_id INT DEFAULT 0 COMMENT '分组ID: 0-默认分组, 1-家人, 2-同事, 3-朋友...',
+    is_top TINYINT DEFAULT 0 COMMENT '是否置顶: 0-否, 1-是',
+    is_mute TINYINT DEFAULT 0 COMMENT '是否免打扰: 0-否, 1-是',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '建立时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    -- 唯一约束：每个用户对同一联系人只能有一条记录
+    UNIQUE KEY uk_user_contact (user_id, contact_user_id),
+
+    -- 索引优化
+    INDEX idx_contact_user_id (contact_user_id),              -- 被谁添加为联系人
+    INDEX idx_group_id (user_id, group_id),                   -- 按分组查询
+    INDEX idx_is_top (user_id, is_top DESC, update_time DESC),-- 置顶+时间排序
+    INDEX idx_update_time (user_id, update_time DESC)         -- 联系人列表排序
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='联系人表';
+
+-- ============================================================
+-- 8. 黑名单表
 -- 功能: 存储用户黑名单关系，实现屏蔽/拉黑功能
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_blacklist (
@@ -206,7 +242,7 @@ CREATE TABLE IF NOT EXISTS im_blacklist (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='黑名单表';
 
 -- ============================================================
--- 8. 消息附件表（文件、图片、语音、视频等富媒体消息）
+-- 9. 消息附件表（文件、图片、语音、视频等富媒体消息）
 -- 功能: 存储消息关联的附件信息，支持多种文件类型
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_attachment (
@@ -232,7 +268,7 @@ CREATE TABLE IF NOT EXISTS im_attachment (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息附件表';
 
 -- ============================================================
--- 9. 消息已读回执表（主要用于群聊场景）
+-- 10. 消息已读回执表（主要用于群聊场景）
 -- 功能: 记录消息已读状态，实现"已读X人"功能
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_message_read (
@@ -252,7 +288,7 @@ CREATE TABLE IF NOT EXISTS im_message_read (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息已读回执表';
 
 -- ============================================================
--- 10. 操作日志表（安全审计和问题追踪）
+-- 11. 操作日志表（安全审计和问题追踪）
 -- 功能: 记录关键操作日志，用于安全审计、问题排查、数据分析
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_operation_log (
@@ -276,7 +312,7 @@ CREATE TABLE IF NOT EXISTS im_operation_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志表';
 
 -- ============================================================
--- 11. 群消息免打扰用户表（细粒度控制）
+-- 12. 群消息免打扰用户表（细粒度控制）
 -- 功能: 记录哪些用户对哪些群开启了免打扰（区别于is_mute的全局设置）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group_mute (
@@ -298,12 +334,77 @@ CREATE TABLE IF NOT EXISTS im_group_mute (
 -- ============================================================
 
 -- 插入默认的系统用户（如果不存在）
-INSERT IGNORE INTO im_user (id, username, nickname, avatar, status) VALUES 
+INSERT IGNORE INTO im_user (id, username, nickname, avatar, status) VALUES
 (1, 'system', '系统消息', '', 1);
 
--- 插示信息
-SELECT '✅ IM系统数据库初始化完成！' AS message;
-SELECT CONCAT('版本: v5.0, 共创建 ', COUNT(*), ' 张数据表') AS info
-FROM information_schema.TABLES 
-WHERE TABLE_SCHEMA = DATABASE() 
+-- ============================================================
+-- 处理旧表 im_friend（v5.0 遗留，已废弃）
+-- ============================================================
+
+-- 创建临时存储过程来处理旧表迁移逻辑
+DROP PROCEDURE IF EXISTS handle_old_friend_table;
+
+DELIMITER //
+CREATE PROCEDURE handle_old_friend_table()
+BEGIN
+    DECLARE old_table_count INT DEFAULT 0;
+    DECLARE backup_time VARCHAR(20);
+
+    -- 检查旧表是否存在
+    SELECT COUNT(*) INTO old_table_count
+    FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'im_friend';
+
+    IF old_table_count > 0 THEN
+        -- 自动备份旧表
+        SET backup_time = DATE_FORMAT(NOW(), '%Y%m%d_%H%i%s');
+
+        SET @sql = CONCAT('CREATE TABLE IF NOT EXISTS im_friend_backup_', backup_time, ' AS SELECT * FROM im_friend');
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+
+        SELECT CONCAT('⚠️  检测到旧表 im_friend，已备份为: im_friend_backup_', backup_time) AS warning;
+        SELECT '📋 请执行数据迁移脚本: migrate_friend_to_new_tables.sql' AS action;
+        SELECT '   迁移完成后可删除旧表: DROP TABLE IF EXISTS im_friend;' AS cleanup;
+    ELSE
+        SELECT '✅ 未检测到旧表 im_friend，无需迁移' AS status;
+    END IF;
+END //
+DELIMITER ;
+
+-- 执行存储过程
+CALL handle_old_friend_table();
+
+-- 清理临时存储过程
+DROP PROCEDURE IF EXISTS handle_old_friend_table;
+
+-- ============================================================
+-- 部署验证
+-- ============================================================
+SELECT '========================================' AS `line`;
+SELECT '        IM 系统数据库部署完成' AS title;
+SELECT '========================================' AS `line`;
+
+SELECT CONCAT('版本: v6.0') AS version;
+SELECT CONCAT('数据库: ', DATABASE()) AS database_name;
+SELECT CONCAT('字符集: utf8mb4') AS charset;
+
+SELECT '--- 表清单 ---' AS section_header;
+SELECT
+    TABLE_NAME AS `表名`,
+    TABLE_COMMENT AS `说明`,
+    CREATE_TIME AS `创建时间`
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME LIKE 'im_%'
+ORDER BY TABLE_NAME;
+
+SELECT CONCAT('共创建 ', COUNT(*), ' 张数据表') AS summary
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = DATABASE()
   AND TABLE_NAME LIKE 'im_%';
+
+SELECT '========================================' AS `line`;
+SELECT '✅ 数据库初始化成功！可以启动应用了。' AS message;
+SELECT '========================================' AS `line`;

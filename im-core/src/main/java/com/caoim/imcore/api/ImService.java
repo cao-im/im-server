@@ -1,6 +1,6 @@
 package com.caoim.imcore.api;
 
-import com.caoim.imcore.dto.FriendDTO;
+import com.caoim.imcore.dto.ContactDTO;
 import com.caoim.imcore.entity.*;
 import java.util.List;
 
@@ -22,6 +22,6 @@ public interface ImService {
     void sendFriendRequest(Long userId, Long friendId);
     void acceptFriendRequest(Long userId, Long friendId);
     void rejectFriendRequest(Long userId, Long friendId);
-    List<FriendDTO> getFriends(Long userId);
-    void deleteFriend(Long userId, Long friendId);
+    List<ContactDTO> getContacts(Long userId);
+    void deleteContact(Long userId, Long contactId);
 }

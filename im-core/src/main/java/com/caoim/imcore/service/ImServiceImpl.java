@@ -2,7 +2,7 @@ package com.caoim.imcore.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.caoim.imcore.api.ImService;
-import com.caoim.imcore.dto.FriendDTO;
+import com.caoim.imcore.dto.ContactDTO;
 import com.caoim.imcore.entity.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,7 +17,8 @@ public class ImServiceImpl implements ImService {
     private final MessageService messageService;
     private final ConversationService conversationService;
     private final GroupService groupService;
-    private final FriendService friendService;
+    private final FriendRequestService friendRequestService;
+    private final ContactService contactService;
 
     @Override
     public User getUser(Long userId) {
@@ -99,26 +100,26 @@ public class ImServiceImpl implements ImService {
 
     @Override
     public void sendFriendRequest(Long userId, Long friendId) {
-        friendService.sendFriendRequest(userId, friendId);
+        friendRequestService.sendFriendRequest(userId, friendId);
     }
 
     @Override
     public void acceptFriendRequest(Long userId, Long friendId) {
-        friendService.acceptFriendRequest(userId, friendId);
+        friendRequestService.acceptFriendRequest(userId, friendId);
     }
 
     @Override
     public void rejectFriendRequest(Long userId, Long friendId) {
-        friendService.rejectFriendRequest(userId, friendId);
+        friendRequestService.rejectFriendRequest(userId, friendId);
     }
 
     @Override
-    public List<FriendDTO> getFriends(Long userId) {
-        return friendService.getFriends(userId);
+    public List<ContactDTO> getContacts(Long userId) {
+        return contactService.getContacts(userId);
     }
 
     @Override
-    public void deleteFriend(Long userId, Long friendId) {
-        friendService.deleteFriend(userId, friendId);
+    public void deleteContact(Long userId, Long contactId) {
+        contactService.deleteContact(userId, contactId);
     }
 }

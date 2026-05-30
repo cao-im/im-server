@@ -5,36 +5,40 @@ import lombok.Data;
 @Data
 public class FriendRequestDTO {
     private String id;
-    private String userId;
-    private String username;
-    private String nickname;
-    private String avatar;
-    private String friendId;
-    private String friendUsername;
-    private String friendNickname;
-    private String friendAvatar;
+    private String fromUserId;
+    private String fromUsername;
+    private String fromNickname;
+    private String fromAvatar;
+    private String toUserId;
+    private String toUsername;
+    private String toNickname;
+    private String toAvatar;
     private Integer status;
+    private String applyMessage;
+    private Integer source;
     private java.time.LocalDateTime createTime;
 
     public static FriendRequestDTO fromEntity(
-            com.caoim.imcore.entity.Friend request,
+            com.caoim.imcore.entity.FriendRequest request,
             com.caoim.imcore.entity.User fromUser,
             com.caoim.imcore.entity.User toUser) {
         FriendRequestDTO dto = new FriendRequestDTO();
         dto.setId(request.getId() != null ? request.getId().toString() : null);
-        dto.setUserId(request.getUserId() != null ? request.getUserId().toString() : null);
-        dto.setFriendId(request.getFriendId() != null ? request.getFriendId().toString() : null);
+        dto.setFromUserId(request.getFromUserId() != null ? request.getFromUserId().toString() : null);
+        dto.setToUserId(request.getToUserId() != null ? request.getToUserId().toString() : null);
+        dto.setApplyMessage(request.getApplyMessage());
+        dto.setSource(request.getSource());
 
         if (fromUser != null) {
-            dto.setUsername(fromUser.getUsername());
-            dto.setNickname(fromUser.getNickname());
-            dto.setAvatar(fromUser.getAvatar());
+            dto.setFromUsername(fromUser.getUsername());
+            dto.setFromNickname(fromUser.getNickname());
+            dto.setFromAvatar(fromUser.getAvatar());
         }
 
         if (toUser != null) {
-            dto.setFriendUsername(toUser.getUsername());
-            dto.setFriendNickname(toUser.getNickname());
-            dto.setFriendAvatar(toUser.getAvatar());
+            dto.setToUsername(toUser.getUsername());
+            dto.setToNickname(toUser.getNickname());
+            dto.setToAvatar(toUser.getAvatar());
         }
 
         dto.setStatus(request.getStatus());
