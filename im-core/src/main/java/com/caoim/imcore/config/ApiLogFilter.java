@@ -3,8 +3,11 @@ package com.caoim.imcore.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -102,13 +105,15 @@ public class ApiLogFilter implements Filter {
         }
 
         if (logBody && shouldLogBody(method)) {
-            logRequestBody(httpRequest, requestId);
+            ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(httpRequest);
+            logRequestBody(requestWrapper, requestId);
+            httpRequest = requestWrapper;
         }
 
         ContentCachingResponseWrapper wrapper = new ContentCachingResponseWrapper(httpResponse);
 
         try {
-            chain.doFilter(request, wrapper);
+            chain.doFilter(httpRequest, wrapper);
         } finally {
             long duration = System.currentTimeMillis() - startTime;
             int status = wrapper.getStatus();
@@ -236,6 +241,53 @@ public class ApiLogFilter implements Filter {
             return "Bearer " + value.substring(7, Math.min(27, value.length())) + "...***";
         }
         return value.substring(0, 5) + "***" + value.substring(value.length() - 3);
+    }
+
+    public static class ContentCachingRequestWrapper extends HttpServletRequestWrapper {
+        private final byte[] cachedBody;
+
+        public ContentCachingRequestWrapper(HttpServletRequest request) throws IOException {
+            super(request);
+            this.cachedBody = StreamUtils.copyToByteArray(request.getInputStream());
+        }
+
+        @Override
+        public ServletInputStream getInputStream() throws IOException {
+            return new CachedServletInputStream(cachedBody);
+        }
+
+        @Override
+        public BufferedReader getReader() throws IOException {
+            return new BufferedReader(new InputStreamReader(getInputStream(), StandardCharsets.UTF_8));
+        }
+
+        private static class CachedServletInputStream extends ServletInputStream {
+            private final java.io.ByteArrayInputStream buffer;
+
+            public CachedServletInputStream(byte[] contents) {
+                this.buffer = new java.io.ByteArrayInputStream(contents);
+            }
+
+            @Override
+            public int read() throws IOException {
+                return buffer.read();
+            }
+
+            @Override
+            public boolean isFinished() {
+                return buffer.available() == 0;
+            }
+
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+
+            @Override
+            public void setReadListener(ReadListener listener) {
+                throw new UnsupportedOperationException();
+            }
+        }
     }
 
     public static class ContentCachingResponseWrapper extends HttpServletResponseWrapper {

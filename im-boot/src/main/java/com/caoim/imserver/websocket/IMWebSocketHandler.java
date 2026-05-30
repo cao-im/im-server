@@ -360,13 +360,38 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             String sessionId = session.getId();
             redisWebSocketService.userOffline(userId, sessionId);
 
-            log.info("用户 {} 断开连接, 当前在线人数: {}", userId, USER_SESSIONS.size());
+            log.info("用户 {} 断开连接, 原因: {}, 当前在线人数: {}", userId, status, USER_SESSIONS.size());
+        } else {
+            log.debug("未知会话断开: sessionId={}, 原因: {}", session.getId(), status);
         }
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        log.error("WebSocket 传输错误: ", exception);
+        Long userId = SESSION_USERS.get(session);
+
+        if (exception instanceof java.net.SocketException) {
+            String errorMsg = exception.getMessage();
+            if (errorMsg != null && (errorMsg.contains("Connection reset") ||
+                errorMsg.contains("Broken pipe") ||
+                errorMsg.contains("Connection aborted"))) {
+                log.warn("WebSocket 连接异常断开: userId={}, sessionId={}, 原因={}",
+                        userId, session.getId(), exception.getMessage());
+            } else {
+                log.error("WebSocket Socket异常: userId={}, sessionId={}", userId, session.getId(), exception);
+            }
+        } else {
+            log.error("WebSocket 传输错误: userId={}, sessionId={}", userId, session.getId(), exception);
+        }
+
+        try {
+            if (session.isOpen()) {
+                session.close(CloseStatus.SERVER_ERROR);
+            }
+        } catch (Exception e) {
+            log.debug("关闭异常会话失败: {}", e.getMessage());
+        }
+
         afterConnectionClosed(session, CloseStatus.SERVER_ERROR);
     }
 
