@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS im_message (
     from_id BIGINT NOT NULL COMMENT '发送者ID',
     to_id BIGINT DEFAULT NULL COMMENT '接收者ID(私聊时使用,与group_id互斥)',
     group_id BIGINT DEFAULT NULL COMMENT '群组ID(群聊时使用,与to_id互斥)',
+    conversation_id BIGINT DEFAULT NULL COMMENT '会话ID(关联im_conversation.id,直接定位所属会话)',
     content TEXT NOT NULL COMMENT '消息内容',
     msg_type TINYINT DEFAULT 0 COMMENT '消息类型: 0-文本, 1-图片, 2-文件, 3-语音, 4-视频, 5-位置, 6-名片, 7-系统消息, 8-合并消息, 9-表情包',
     msg_status TINYINT DEFAULT 0 COMMENT '消息阅读状态: 0-未读, 1-已读',
@@ -87,13 +88,12 @@ CREATE TABLE IF NOT EXISTS im_message (
 
     -- 索引优化（高频查询场景）
     INDEX idx_msg_seq (msg_seq),                              -- 消息序号索引（增量同步）
-    INDEX idx_from_id (from_id),                              -- 发送者查询
-    INDEX idx_to_id (to_id),                                  -- 接收者查询（离线消息拉取）
-    INDEX idx_group_id (group_id),                            -- 群组消息查询
-    INDEX idx_create_time (create_time),                      -- 时间范围查询
-    INDEX idx_conversation (to_id, from_id, create_time),     -- 私聊会话查询
-    INDEX idx_group_conversation (group_id, create_time),     -- 群聊会话查询
-    INDEX idx_from_create (from_id, create_time)              -- 发送记录查询
+    INDEX idx_from_id (fromId),                               -- 发送者查询
+    INDEX idx_to_id (toId),                                   -- 接收者查询（离线消息拉取）
+    INDEX idx_group_id (groupId),                             -- 群组消息查询
+    INDEX idx_conversation_id (conversationId),               -- ✅ 会话ID索引（核心优化）
+    INDEX idx_create_time (createTime),                       -- 时间范围查询
+    INDEX idx_from_create (fromId, createTime)                -- 发送记录查询
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息表';
 
 -- ============================================================
