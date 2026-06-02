@@ -1,5 +1,6 @@
 package com.caoim.imserver.controller;
 
+import com.caoim.imcore.common.BusinessException;
 import com.caoim.imcore.common.Result;
 import com.caoim.imserver.common.UserContext;
 import com.caoim.imcore.dto.LoginDTO;
@@ -34,6 +35,20 @@ public class UserController {
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody LoginDTO dto) {
         return Result.success(userService.login(dto));
+    }
+
+    @Operation(summary = "刷新Token", description = "使用RefreshToken获取新的AccessToken和RefreshToken")
+    @PostMapping("/refresh-token")
+    public Result<Map<String, Object>> refreshToken(@RequestBody Map<String, String> body) {
+        String refreshToken = body.get("refreshToken");
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return Result.error(400, "缺少refreshToken参数");
+        }
+        try {
+            return Result.success(userService.refreshToken(refreshToken));
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
     }
 
     @Operation(summary = "获取当前登录用户信息")

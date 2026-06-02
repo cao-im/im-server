@@ -86,14 +86,33 @@ public class MessageService {
     }
 
     /**
-     * ✅ 根据会话ID查询消息（新方式：简单高效）
+     * 根据会话ID查询消息（包含完整对话：双方发送的所有消息）
+     * 
+     * 设计说明：
+     * - 虽然会话表有2条记录（A视角和B视角），但消息是共享的
+     * - 查询时根据 conversation_id 找到对应的 user_pair
+     * - 然后查询该 user_pair 的所有消息（from→to 和 to→from）
      */
     public Page<Message> getMessagesByConversationId(Long conversationId, int page, int size) {
+        Conversation conv = conversationMapper.selectById(conversationId);
+        if (conv == null) {
+            log.warn("会话不存在: conversationId={}", conversationId);
+            return new Page<>(page, size);
+        }
+        
+        Long userId = conv.getUserId();
+        Long targetId = conv.getTargetId();
+        
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Message::getConversationId, conversationId);
+        wrapper.and(w -> 
+            w.eq(Message::getFromId, userId).eq(Message::getToId, targetId)
+             .or()
+             .eq(Message::getFromId, targetId).eq(Message::getToId, userId)
+        );
         wrapper.orderByAsc(Message::getCreateTime);
         
-        log.debug("查询会话消息: conversationId={}, page={}, size={}", conversationId, page, size);
+        log.debug("查询会话完整消息: conversationId={}, userId={}, targetId={}, page={}, size={}", 
+                conversationId, userId, targetId, page, size);
         
         return messageMapper.selectPage(new Page<>(page, size), wrapper);
     }

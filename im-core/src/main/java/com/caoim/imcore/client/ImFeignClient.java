@@ -36,6 +36,9 @@ public interface ImFeignClient {
     @PostMapping("/user/login")
     Result<Map<String, Object>> loginUser(@RequestBody LoginDTO dto);
 
+    @PostMapping("/user/refresh-token")
+    Result<Map<String, Object>> refreshImToken(@RequestBody Map<String, String> body);
+
     @GetMapping("/user/info/{userId}")
     Result<User> getUserInfo(@PathVariable("userId") Long userId);
 

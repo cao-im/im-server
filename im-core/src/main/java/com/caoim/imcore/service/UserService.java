@@ -11,6 +11,7 @@ import com.caoim.imcore.dto.UserSearchDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -23,6 +24,9 @@ public class UserService {
 
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
+
+    @Value("${jwt.expiration}")
+    private Long expiration;
 
     public Map<String, Object> register(RegisterDTO dto) {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
@@ -38,8 +42,12 @@ public class UserService {
         userMapper.insert(user);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
+        result.put("refreshToken", refreshToken);
+        result.put("tokenType", "Bearer");
+        result.put("expiresIn", expiration / 1000);
         result.put("user", getUserInfo(user.getId()));
         return result;
     }
@@ -57,9 +65,36 @@ public class UserService {
         userMapper.updateById(user);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
+        result.put("refreshToken", refreshToken);
+        result.put("tokenType", "Bearer");
+        result.put("expiresIn", expiration / 1000);
         result.put("user", getUserInfo(user.getId()));
+        return result;
+    }
+
+    public Map<String, Object> refreshToken(String refreshToken) {
+        if (!jwtUtil.validateRefreshToken(refreshToken)) {
+            throw new BusinessException(ErrorCode.TOKEN_INVALID.getCode(), "无效的Refresh Token");
+        }
+
+        Long userId = jwtUtil.getUserIdFromToken(refreshToken);
+        String username = jwtUtil.getUsernameFromToken(refreshToken);
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        String newToken = jwtUtil.generateToken(userId, username);
+        String newRefreshToken = jwtUtil.generateRefreshToken(userId, username);
+        Map<String, Object> result = new HashMap<>();
+        result.put("token", newToken);
+        result.put("refreshToken", newRefreshToken);
+        result.put("tokenType", "Bearer");
+        result.put("expiresIn", expiration / 1000);
         return result;
     }
 

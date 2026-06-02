@@ -15,11 +15,7 @@ import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -46,6 +42,34 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String token = getTokenFromSession(session);
         if (token == null || !jwtUtil.validateToken(token)) {
+            String uri = session.getUri() != null ? session.getUri().toString() : "null";
+            if (token == null) {
+                log.warn("❌ WebSocket 认证失败 - Token缺失: sessionId={}, uri={}, 提示: 请在URL中添加token参数(?token=xxx)",
+                        session.getId(), uri);
+            } else {
+                try {
+                    jwtUtil.parseToken(token);
+                    log.warn("❌ WebSocket 认证失败 - 未知错误: sessionId={}", session.getId());
+                } catch (io.jsonwebtoken.ExpiredJwtException e) {
+                    long expTime = e.getClaims().getExpiration().getTime();
+                    long nowTime = System.currentTimeMillis();
+                    long expiredMs = nowTime - expTime;
+                    String expiredInfo = expiredMs > 0 ?
+                            String.format("已过期 %d 分钟", expiredMs / 60000) :
+                            String.format("还未生效 (%d 分钟后生效)", -expiredMs / 60000);
+                    log.warn("❌ WebSocket 认证失败 - Token已过期: sessionId={}, 过期时间={}, 当前时间={}, {}",
+                            session.getId(), e.getClaims().getExpiration(), new Date(nowTime), expiredInfo);
+                } catch (io.jsonwebtoken.security.SignatureException e) {
+                    log.warn("❌ WebSocket 认证失败 - 签名无效: sessionId={}, 原因: Token签名与服务端secret不匹配，请重新登录",
+                            session.getId());
+                } catch (io.jsonwebtoken.MalformedJwtException e) {
+                    log.warn("❌ WebSocket 认证失败 - Token格式错误: sessionId={}, 原因: {}",
+                            session.getId(), e.getMessage());
+                } catch (Exception e) {
+                    log.warn("❌ WebSocket 认证失败 - 验证异常: sessionId={}, 异常类型={}, 原因: {}",
+                            session.getId(), e.getClass().getSimpleName(), e.getMessage());
+                }
+            }
             session.close(CloseStatus.NOT_ACCEPTABLE);
             return;
         }

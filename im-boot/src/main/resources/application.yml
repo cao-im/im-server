@@ -54,7 +54,8 @@ mybatis-plus:
 
 jwt:
   secret: im-server-jwt-secret-key-2024-must-be-long-enough-for-hs256-algorithm
-  expiration: 86400000
+  expiration: 604800000  # 7天（单位：毫秒）
+  refresh-expiration: 2592000000  # 30天（Refresh Token有效期）
 
 springdoc:
   api-docs:
