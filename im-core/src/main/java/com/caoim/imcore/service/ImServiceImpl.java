@@ -15,7 +15,6 @@ public class ImServiceImpl implements ImService {
 
     private final UserService userService;
     private final MessageService messageService;
-    private final ConversationService conversationService;
     private final GroupService groupService;
     private final FriendRequestService friendRequestService;
     private final ContactService contactService;
@@ -48,34 +47,8 @@ public class ImServiceImpl implements ImService {
     }
 
     @Override
-    public void markAsRead(Long userId, Long conversationId) {
-        Conversation conversation = conversationService.getConversation(conversationId);
-        if (conversation != null) {
-            conversationService.clearUnreadCount(userId, conversation.getTargetId());
-        }
-    }
-
-    @Override
     public long getUnreadCount(Long userId) {
         return messageService.getUnreadCount(userId);
-    }
-
-    @Override
-    public List<Conversation> getConversations(Long userId) {
-        return conversationService.getConversations(userId);
-    }
-
-    @Override
-    public void clearUnread(Long conversationId) {
-        // 需要用户ID，这里简化处理，实际应该传入userId
-    }
-
-    @Override
-    public void deleteConversation(Long userId, Long conversationId) {
-        Conversation conversation = conversationService.getConversation(conversationId);
-        if (conversation != null) {
-            conversationService.deleteConversation(userId, conversation.getTargetId());
-        }
     }
 
     @Override

@@ -26,11 +26,6 @@ public class Constants {
         public static final int READ = 1;
     }
 
-    public static class ConversationType {
-        public static final int PRIVATE = 1;
-        public static final int GROUP = 2;
-    }
-
     public static class FriendStatus {
         public static final int PENDING = 0;
         public static final int ACCEPTED = 1;

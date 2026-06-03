@@ -16,8 +16,6 @@ public class Message {
     private Long fromId;
     private Long toId;
     private Long groupId;
-    /** 会话ID(关联im_conversation.id) */
-    private Long conversationId;
     private String content;
     private Integer msgType;
     /** 消息阅读状态: 0-未读, 1-已读 */
@@ -38,10 +36,5 @@ public class Message {
         this.content = content;
         this.msgType = msgType;
         this.msgStatus = 0;
-    }
-
-    public Message(Long fromId, Long toId, Long groupId, Long conversationId, String content, Integer msgType) {
-        this(fromId, toId, groupId, content, msgType);
-        this.conversationId = conversationId;
     }
 }

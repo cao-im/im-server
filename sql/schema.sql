@@ -12,11 +12,10 @@
 --   - 新增联系人/好友关系表 (im_contact) 支持备注、分组、置顶、免打扰
 --   - 废弃旧表 im_friend（如存在将自动备份并提示迁移）
 --
--- 表清单 (共12张):
+-- 表清单 (共11张):
 --   1. im_user          - 用户表
 --   2. im_message       - 消息表（核心）
---   3. im_conversation  - 会话表
---   4. im_group         - 群组表
+--   3. im_group         - 群组表
 --   5. im_group_member  - 群成员表
 --   6. im_friend_request- 好友申请表 [新增]
 --   7. im_contact       - 联系人表（好友关系）[新增]
@@ -77,7 +76,6 @@ CREATE TABLE IF NOT EXISTS im_message (
     from_id BIGINT NOT NULL COMMENT '发送者ID',
     to_id BIGINT DEFAULT NULL COMMENT '接收者ID(私聊时使用,与group_id互斥)',
     group_id BIGINT DEFAULT NULL COMMENT '群组ID(群聊时使用,与to_id互斥)',
-    conversation_id BIGINT DEFAULT NULL COMMENT '会话ID(关联im_conversation.id,直接定位所属会话)',
     content TEXT NOT NULL COMMENT '消息内容',
     msg_type TINYINT DEFAULT 0 COMMENT '消息类型: 0-文本, 1-图片, 2-文件, 3-语音, 4-视频, 5-位置, 6-名片, 7-系统消息, 8-合并消息, 9-表情包',
     msg_status TINYINT DEFAULT 0 COMMENT '消息阅读状态: 0-未读, 1-已读',
@@ -91,43 +89,12 @@ CREATE TABLE IF NOT EXISTS im_message (
     INDEX idx_from_id (fromId),                               -- 发送者查询
     INDEX idx_to_id (toId),                                   -- 接收者查询（离线消息拉取）
     INDEX idx_group_id (groupId),                             -- 群组消息查询
-    INDEX idx_conversation_id (conversationId),               -- ✅ 会话ID索引（核心优化）
     INDEX idx_create_time (createTime),                       -- 时间范围查询
     INDEX idx_from_create (fromId, createTime)                -- 发送记录查询
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息表';
 
 -- ============================================================
--- 3. 会话表（用户会话列表）
--- 功能: 存储用户的会话列表，支持置顶、免打扰、草稿等功能
--- ============================================================
-CREATE TABLE IF NOT EXISTS im_conversation (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '会话ID(自增)',
-    user_id BIGINT NOT NULL COMMENT '用户ID(会话所属者)',
-    target_id BIGINT NOT NULL COMMENT '目标ID(对方用户ID或群组ID)',
-    conversation_type TINYINT NOT NULL COMMENT '会话类型: 1-私聊, 2-群聊',
-    last_msg_id BIGINT DEFAULT NULL COMMENT '最后一条消息ID(关联im_message.id)',
-    last_message VARCHAR(500) DEFAULT '' COMMENT '最后一条消息内容(冗余字段,提升列表查询性能)',
-    last_msg_type TINYINT DEFAULT 0 COMMENT '最后一条消息类型(UI显示对应图标)',
-    last_msg_time DATETIME DEFAULT NULL COMMENT '最后一条消息时间(会话排序依据)',
-    unread_count INT DEFAULT 0 COMMENT '未读消息数',
-    is_top TINYINT DEFAULT 0 COMMENT '是否置顶: 0-否, 1-是',
-    is_mute TINYINT DEFAULT 0 COMMENT '是否免打扰: 0-否, 1-是(不推送通知)',
-    is_deleted TINYINT DEFAULT 0 COMMENT '是否删除: 0-否, 1-是(仅删除会话,不删除消息)',
-    draft_content TEXT DEFAULT NULL COMMENT '草稿内容(输入框未发送的内容)',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-
-    -- 唯一约束：每个用户对同一目标只能有一个会话
-    UNIQUE KEY uk_user_target (user_id, target_id, conversation_type),
-
-    -- 索引优化
-    INDEX idx_user_id (user_id),
-    INDEX idx_update_time (user_id, update_time DESC),         -- 会话列表按时间排序
-    INDEX idx_unread (user_id, is_top DESC, update_time DESC)  -- 未读+置顶排序
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会话表';
-
--- ============================================================
--- 4. 群组表
+-- 3. 群组表
 -- 功能: 存储群组基本信息和管理配置
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group (
@@ -151,7 +118,7 @@ CREATE TABLE IF NOT EXISTS im_group (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群组表';
 
 -- ============================================================
--- 5. 群成员表
+-- 4. 群成员表
 -- 功能: 存储群组成员信息，支持角色管理、禁言、已读回执
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group_member (
@@ -176,7 +143,7 @@ CREATE TABLE IF NOT EXISTS im_group_member (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群成员表';
 
 -- ============================================================
--- 6. 好友申请表（存储好友申请流程）
+-- 5. 好友申请表（存储好友申请流程）
 -- 功能: 存储好友申请、验证消息、状态流转
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_friend_request (
@@ -200,7 +167,7 @@ CREATE TABLE IF NOT EXISTS im_friend_request (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='好友申请表';
 
 -- ============================================================
--- 7. 联系人表（存储已建立的好友关系）
+-- 6. 联系人表（存储已建立的好友关系）
 -- 功能: 存储联系人列表，支持备注、分组、置顶等功能
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_contact (
@@ -225,7 +192,7 @@ CREATE TABLE IF NOT EXISTS im_contact (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='联系人表';
 
 -- ============================================================
--- 8. 黑名单表
+-- 7. 黑名单表
 -- 功能: 存储用户黑名单关系，实现屏蔽/拉黑功能
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_blacklist (
@@ -242,7 +209,7 @@ CREATE TABLE IF NOT EXISTS im_blacklist (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='黑名单表';
 
 -- ============================================================
--- 9. 消息附件表（文件、图片、语音、视频等富媒体消息）
+-- 8. 消息附件表（文件、图片、语音、视频等富媒体消息）
 -- 功能: 存储消息关联的附件信息，支持多种文件类型
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_attachment (
@@ -268,7 +235,7 @@ CREATE TABLE IF NOT EXISTS im_attachment (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息附件表';
 
 -- ============================================================
--- 10. 消息已读回执表（主要用于群聊场景）
+-- 9. 消息已读回执表（主要用于群聊场景）
 -- 功能: 记录消息已读状态，实现"已读X人"功能
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_message_read (
@@ -288,7 +255,7 @@ CREATE TABLE IF NOT EXISTS im_message_read (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息已读回执表';
 
 -- ============================================================
--- 11. 操作日志表（安全审计和问题追踪）
+-- 10. 操作日志表（安全审计和问题追踪）
 -- 功能: 记录关键操作日志，用于安全审计、问题排查、数据分析
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_operation_log (
@@ -312,7 +279,7 @@ CREATE TABLE IF NOT EXISTS im_operation_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志表';
 
 -- ============================================================
--- 12. 群消息免打扰用户表（细粒度控制）
+-- 11. 群消息免打扰用户表（细粒度控制）
 -- 功能: 记录哪些用户对哪些群开启了免打扰（区别于is_mute的全局设置）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_group_mute (

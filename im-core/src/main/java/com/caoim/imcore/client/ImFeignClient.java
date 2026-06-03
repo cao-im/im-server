@@ -66,17 +66,6 @@ public interface ImFeignClient {
     @GetMapping("/message/unread/count")
     Result<Long> getUnreadCount(@RequestParam("userId") Long userId);
 
-    // ==================== 会话接口 ====================
-
-    @GetMapping("/conversation/list")
-    Result<List<Conversation>> getConversations(@RequestParam("userId") Long userId);
-
-    @PutMapping("/conversation/read")
-    Result<Void> clearUnreadCount(@RequestParam("userId") Long userId, @RequestParam("targetId") Long targetId);
-
-    @DeleteMapping("/conversation/{targetId}")
-    Result<Void> deleteConversation(@RequestParam("userId") Long userId, @PathVariable("targetId") Long targetId);
-
     // ==================== 群组接口 ====================
 
     @PostMapping("/group/create")

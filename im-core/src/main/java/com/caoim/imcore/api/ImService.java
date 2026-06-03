@@ -10,11 +10,7 @@ public interface ImService {
     Message sendMessage(Long fromId, Long toId, Long groupId, String content, Integer msgType);
     List<Message> getPrivateHistory(Long userId, Long targetId, int page, int size);
     List<Message> getGroupHistory(Long groupId, int page, int size);
-    void markAsRead(Long userId, Long conversationId);
     long getUnreadCount(Long userId);
-    List<Conversation> getConversations(Long userId);
-    void clearUnread(Long conversationId);
-    void deleteConversation(Long userId, Long conversationId);
     Group createGroup(String name, Long ownerId, List<Long> memberIds);
     List<Group> getUserGroups(Long userId);
     void addGroupMembers(Long groupId, List<Long> userIds);
