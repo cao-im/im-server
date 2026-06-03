@@ -15,7 +15,12 @@ import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -243,38 +248,10 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                     sinceMessageId
             );
 
-            // 构建响应数据
+            // 构建响应数据（使用 messageToMap 自动包含 senderInfo/groupInfo）
             List<Map<String, Object>> messagesData = new ArrayList<>();
             for (Message msg : offlineMessages) {
-                Map<String, Object> msgData = new HashMap<>();
-                msgData.put("id", msg.getId());
-                msgData.put("fromId", msg.getFromId());
-                msgData.put("toId", msg.getToId());
-                msgData.put("groupId", msg.getGroupId());
-
-                // 处理content字段（处理null值）
-                String content = msg.getContent();
-                if (content == null) {
-                    content = "";
-                }
-                msgData.put("content", content);
-
-                msgData.put("msgType", msg.getMsgType());
-                msgData.put("msgStatus", msg.getMsgStatus());
-
-                // 转换时间戳为毫秒（处理null值）
-                if (msg.getCreateTime() != null) {
-                    long timestamp = msg.getCreateTime()
-                            .atZone(java.time.ZoneId.systemDefault())
-                            .toInstant()
-                            .toEpochMilli();
-                    msgData.put("timestamp", timestamp);
-                } else {
-                    log.warn("消息create_time为null, 使用当前时间: messageId={}", msg.getId());
-                    msgData.put("timestamp", System.currentTimeMillis());
-                }
-
-                messagesData.add(msgData);
+                messagesData.add(MessageService.messageToMap(msg));
             }
 
             // 判断是否还有更多数据
@@ -452,10 +429,20 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     }
 
     public void pushPrivateMessage(Long fromId, Long toId, Object messageData) {
+        // 构建包含完整sender信息的推送数据
+        Object data;
+        if (messageData instanceof Message) {
+            data = MessageService.messageToMap((Message) messageData);
+        } else {
+            data = messageData;
+        }
+
         String message = JSON.toJSONString(Map.of(
                 "type", "message",
-                "data", messageData
+                "data", data
         ));
+
+        log.info("📡 [WS推送-私聊] fromId={}, toId={}, 推送数据={}", fromId, toId, message);
 
         pushMessageToUser(toId, message);
 
@@ -507,11 +494,21 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     }
 
     public void pushGroupMessage(Long fromId, Long groupId, Object messageData) {
+        // 构建包含完整sender信息和group信息的推送数据
+        Object data;
+        if (messageData instanceof Message) {
+            data = MessageService.messageToMap((Message) messageData);
+        } else {
+            data = messageData;
+        }
+
         String message = JSON.toJSONString(Map.of(
                 "type", "group_message",
-                "data", messageData,
+                "data", data,
                 "groupId", groupId
         ));
+
+        log.info("📡 [WS推送-群聊] fromId={}, groupId={}, 推送数据={}", fromId, groupId, message);
 
         for (Map.Entry<Long, WebSocketSession> entry : USER_SESSIONS.entrySet()) {
             if (!entry.getKey().equals(fromId)) {

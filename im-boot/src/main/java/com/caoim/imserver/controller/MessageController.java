@@ -158,35 +158,10 @@ public class MessageController {
                 sinceMessageId
         );
 
-        // 构建响应数据
+        // 构建响应数据（使用 messageToMap 自动包含 senderInfo/groupInfo）
         List<Map<String, Object>> messagesData = new ArrayList<>();
         for (Message msg : offlineMessages) {
-            Map<String, Object> msgData = new HashMap<>();
-            msgData.put("id", msg.getId());
-            msgData.put("fromId", msg.getFromId());
-            msgData.put("toId", msg.getToId());
-            msgData.put("groupId", msg.getGroupId());
-
-            String content = msg.getContent();
-            if (content == null) {
-                content = "";
-            }
-            msgData.put("content", content);
-
-            msgData.put("msgType", msg.getMsgType());
-            msgData.put("msgStatus", msg.getMsgStatus());
-
-            if (msg.getCreateTime() != null) {
-                long timestamp = msg.getCreateTime()
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli();
-                msgData.put("timestamp", timestamp);
-            } else {
-                msgData.put("timestamp", System.currentTimeMillis());
-            }
-
-            messagesData.add(msgData);
+            messagesData.add(MessageService.messageToMap(msg));
         }
 
         boolean hasMore = (offset + offlineMessages.size()) < totalCount;

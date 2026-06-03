@@ -1,5 +1,6 @@
 package com.caoim.imcore.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.caoim.imcore.common.BusinessException;
@@ -8,10 +9,16 @@ import com.caoim.imcore.common.ErrorCode;
 import com.caoim.imcore.dao.MessageMapper;
 import com.caoim.imcore.dao.MessageReadMapper;
 import com.caoim.imcore.dao.ConversationMapper;
+import com.caoim.imcore.dao.GroupMemberMapper;
 import com.caoim.imcore.entity.Conversation;
+import com.caoim.imcore.entity.Group;
+import com.caoim.imcore.entity.GroupMember;
 import com.caoim.imcore.entity.Message;
 import com.caoim.imcore.entity.MessageRead;
+import com.caoim.imcore.entity.User;
 import com.caoim.imcore.event.MessageSentEvent;
+import com.caoim.imcore.dto.SenderInfo;
+import com.caoim.imcore.dto.GroupInfoDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -20,7 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -32,6 +41,8 @@ public class MessageService {
     private final ConversationService conversationService;
     private final ConversationMapper conversationMapper;
     private final UserService userService;
+    private final GroupService groupService;
+    private final GroupMemberMapper groupMemberMapper;
     private final ApplicationEventPublisher eventPublisher;
 
     public Message sendMessage(Long fromId, Long toId, Long groupId, String content, Integer msgType) {
@@ -78,6 +89,13 @@ public class MessageService {
         }
 
         Message message = new Message(fromId, toId, groupId, conversationId, content, msgType);
+
+        // 构建发送者信息快照并注入消息的extra字段
+        String extraJson = buildMessageExtra(fromId, groupId);
+        message.setExtra(extraJson);
+
+        log.info("📤 [消息发送] fromId={}, toId={}, groupId={}, extra={}", fromId, toId, groupId, extraJson);
+
         messageMapper.insert(message);
 
         eventPublisher.publishEvent(new MessageSentEvent(this, message, fromId, toId, groupId));
@@ -397,5 +415,193 @@ public class MessageService {
         wrapper.eq(Message::getGroupId, groupId);
         wrapper.orderByAsc(Message::getCreateTime);
         return messageMapper.selectPage(new Page<>(page, size), wrapper);
+    }
+
+    // ==================== 发送者信息快照构建 ====================
+
+    /**
+     * 构建消息的 extra 字段（JSON格式）
+     * 包含发送者的昵称、头像等快照信息，以及群聊时的群组信息
+     * 这样接收方即使没有本地缓存也能正常显示发送者身份
+     */
+    private String buildMessageExtra(Long fromId, Long groupId) {
+        try {
+            Map<String, Object> extraData = new HashMap<>();
+
+            // 1. 构建发送者信息
+            SenderInfo senderInfo = buildSenderInfo(fromId, groupId);
+            extraData.put("senderInfo", senderInfo);
+
+            // 2. 如果是群聊，额外添加群组信息
+            if (groupId != null) {
+                GroupInfoDTO groupInfo = buildGroupInfo(groupId);
+                extraData.put("groupInfo", groupInfo);
+            }
+
+            return JSON.toJSONString(extraData);
+        } catch (Exception e) {
+            log.warn("构建消息extra字段失败, fromId={}, groupId={}, error={}", fromId, groupId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 构建发送者信息快照
+     */
+    private SenderInfo buildSenderInfo(Long fromId, Long groupId) {
+        User user = userService.getUserInfo(fromId);
+
+        String nickname = user != null ? user.getNickname() : null;
+        String avatar = user != null ? user.getAvatar() : null;
+
+        // 如果是群聊，尝试获取群昵称
+        String groupNickname = null;
+        if (groupId != null) {
+            groupNickname = getGroupMemberNickname(fromId, groupId);
+        }
+
+        return new SenderInfo(fromId, nickname, avatar, groupNickname);
+    }
+
+    /**
+     * 构建群组信息快照
+     */
+    private GroupInfoDTO buildGroupInfo(Long groupId) {
+        try {
+            Group group = groupService.getGroupInfo(groupId);
+            if (group != null) {
+                return new GroupInfoDTO(group.getId(), group.getName(), group.getAvatar());
+            }
+        } catch (Exception e) {
+            log.warn("获取群组信息失败: groupId={}, error={}", groupId, e.getMessage());
+        }
+        return new GroupInfoDTO(groupId, null, null);
+    }
+
+    /**
+     * 获取用户在指定群组的群昵称
+     */
+    private String getGroupMemberNickname(Long userId, Long groupId) {
+        try {
+            LambdaQueryWrapper<GroupMember> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(GroupMember::getUserId, userId)
+                   .eq(GroupMember::getGroupId, groupId)
+                   .select(GroupMember::getNickname);
+            
+            GroupMember member = groupMemberMapper.selectOne(wrapper);
+            if (member != null && member.getNickname() != null && !member.getNickname().trim().isEmpty()) {
+                return member.getNickname().trim();
+            }
+        } catch (Exception e) {
+            log.debug("查询群成员昵称失败: userId={}, groupId={}", userId, groupId);
+        }
+        return null;
+    }
+
+    // ==================== 消息extra字段解析工具方法 ====================
+
+    /**
+     * 从消息的extra字段中解析出发送者信息
+     *
+     * @param message 消息对象
+     * @return 发送者信息，解析失败返回null
+     */
+    public static SenderInfo parseSenderInfo(Message message) {
+        if (message == null || message.getExtra() == null || message.getExtra().isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> extraMap = JSON.parseObject(message.getExtra(), Map.class);
+            if (extraMap != null && extraMap.containsKey("senderInfo")) {
+                Object senderInfoObj = extraMap.get("senderInfo");
+                if (senderInfoObj instanceof Map) {
+                    Map<String, Object> senderMap = (Map<String, Object>) senderInfoObj;
+                    SenderInfo info = new SenderInfo();
+                    if (senderMap.get("userId") instanceof Number) {
+                        info.setUserId(((Number) senderMap.get("userId")).longValue());
+                    }
+                    info.setNickname((String) senderMap.get("nickname"));
+                    info.setAvatar((String) senderMap.get("avatar"));
+                    info.setGroupNickname((String) senderMap.get("groupNickname"));
+                    return info;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析senderInfo失败: messageId={}, error={}", message.getId(), e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 从消息的extra字段中解析出群组信息
+     *
+     * @param message 消息对象
+     * @return 群组信息，解析失败返回null
+     */
+    public static GroupInfoDTO parseGroupInfo(Message message) {
+        if (message == null || message.getExtra() == null || message.getExtra().isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> extraMap = JSON.parseObject(message.getExtra(), Map.class);
+            if (extraMap != null && extraMap.containsKey("groupInfo")) {
+                Object groupInfoObj = extraMap.get("groupInfo");
+                if (groupInfoObj instanceof Map) {
+                    Map<String, Object> groupMap = (Map<String, Object>) groupInfoObj;
+                    GroupInfoDTO info = new GroupInfoDTO();
+                    if (groupMap.get("groupId") instanceof Number) {
+                        info.setGroupId(((Number) groupMap.get("groupId")).longValue());
+                    }
+                    info.setGroupName((String) groupMap.get("groupName"));
+                    info.setGroupAvatar((String) groupMap.get("groupAvatar"));
+                    return info;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析groupInfo失败: messageId={}, error={}", message.getId(), e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 将消息转换为包含完整信息的Map（用于API返回和WebSocket推送）
+     * 自动从extra字段解析出senderInfo和groupInfo并放入返回数据
+     */
+    public static Map<String, Object> messageToMap(Message msg) {
+        Map<String, Object> msgData = new HashMap<>();
+        msgData.put("id", msg.getId());
+        msgData.put("mid", msg.getMid());
+        msgData.put("fromId", msg.getFromId());
+        msgData.put("toId", msg.getToId());
+        msgData.put("groupId", msg.getGroupId());
+
+        String content = msg.getContent();
+        msgData.put("content", content != null ? content : "");
+
+        msgData.put("msgType", msg.getMsgType());
+        msgData.put("msgStatus", msg.getMsgStatus());
+
+        if (msg.getCreateTime() != null) {
+            long timestamp = msg.getCreateTime()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli();
+            msgData.put("timestamp", timestamp);
+        } else {
+            msgData.put("timestamp", System.currentTimeMillis());
+        }
+
+        // 解析并附加发送者信息和群组信息
+        SenderInfo senderInfo = parseSenderInfo(msg);
+        if (senderInfo != null) {
+            msgData.put("senderInfo", senderInfo);
+        }
+
+        GroupInfoDTO groupInfo = parseGroupInfo(msg);
+        if (groupInfo != null) {
+            msgData.put("groupInfo", groupInfo);
+        }
+
+        return msgData;
     }
 }
