@@ -5,6 +5,7 @@ import com.caoim.imcore.common.Result;
 import com.caoim.imserver.common.UserContext;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.RegisterDTO;
+import com.caoim.imcore.dto.UpdateProfileDTO;
 import com.caoim.imcore.dto.UserSearchDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.service.UserService;
@@ -72,6 +73,31 @@ public class UserController {
     public Result<Void> updateStatus(@RequestParam("userId") Long userId, @RequestParam("status") Integer status) {
         userService.updateStatus(userId, status);
         return Result.success();
+    }
+
+    @Operation(summary = "更新个人资料", description = "支持修改昵称、头像、签名、性别、生日、地区、电话、邮箱。内部服务间调用可通过userId参数指定用户")
+    @PutMapping("/profile")
+    public Result<User> updateProfile(
+            @RequestBody UpdateProfileDTO dto,
+            @RequestParam(value = "userId", required = false) Long requestUserId,
+            HttpServletRequest request) {
+        Long userId;
+        if (requestUserId != null) {
+            // 内部服务间调用：通过参数传递 userId
+            userId = requestUserId;
+        } else {
+            // 外部客户端调用：从 Token 中解析
+            userId = UserContext.getCurrentUserId(request);
+            if (userId == null) {
+                return Result.error(401, "未认证或Token无效");
+            }
+        }
+        try {
+            User updatedUser = userService.updateProfile(userId, dto);
+            return Result.success(updatedUser);
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
     }
 
     @Operation(summary = "搜索用户")

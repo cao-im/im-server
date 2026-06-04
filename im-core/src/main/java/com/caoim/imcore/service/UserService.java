@@ -7,6 +7,7 @@ import com.caoim.imcore.common.ErrorCode;
 import com.caoim.imcore.dao.UserMapper;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.RegisterDTO;
+import com.caoim.imcore.dto.UpdateProfileDTO;
 import com.caoim.imcore.dto.UserSearchDTO;
 import com.caoim.imcore.entity.User;
 import com.caoim.imcore.util.JwtUtil;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -145,5 +148,40 @@ public class UserService {
         }
 
         return userMapper.selectList(wrapper);
+    }
+
+    public User updateProfile(Long userId, UpdateProfileDTO dto) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        if (dto.getNickname() != null) {
+            user.setNickname(dto.getNickname());
+        }
+        if (dto.getAvatar() != null) {
+            user.setAvatar(dto.getAvatar());
+        }
+        if (dto.getSignature() != null) {
+            user.setSignature(dto.getSignature());
+        }
+        if (dto.getGender() != null) {
+            user.setGender(dto.getGender());
+        }
+        if (dto.getBirthday() != null && !dto.getBirthday().isBlank()) {
+            user.setBirthday(LocalDate.parse(dto.getBirthday()));
+        }
+        if (dto.getLocation() != null) {
+            user.setLocation(dto.getLocation());
+        }
+        if (dto.getPhone() != null) {
+            user.setPhone(dto.getPhone());
+        }
+        if (dto.getEmail() != null) {
+            user.setEmail(dto.getEmail());
+        }
+
+        userMapper.updateById(user);
+        return user;
     }
 }

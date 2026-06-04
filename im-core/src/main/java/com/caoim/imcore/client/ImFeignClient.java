@@ -7,6 +7,7 @@ import com.caoim.imcore.dto.GroupCreateDTO;
 import com.caoim.imcore.dto.LoginDTO;
 import com.caoim.imcore.dto.MessageSendDTO;
 import com.caoim.imcore.dto.RegisterDTO;
+import com.caoim.imcore.dto.UpdateProfileDTO;
 import com.caoim.imcore.entity.*;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
@@ -44,6 +45,9 @@ public interface ImFeignClient {
 
     @PutMapping("/user/status")
     Result<Void> updateStatus(@RequestParam("userId") Long userId, @RequestParam("status") Integer status);
+
+    @PutMapping("/user/profile")
+    Result<User> updateUserProfile(@RequestBody UpdateProfileDTO dto, @RequestParam("userId") Long userId);
 
     // ==================== 消息接口 ====================
 
