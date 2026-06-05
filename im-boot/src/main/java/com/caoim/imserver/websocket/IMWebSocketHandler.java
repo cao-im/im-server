@@ -57,13 +57,23 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                     log.warn("❌ WebSocket 认证失败 - 未知错误: sessionId={}", session.getId());
                 } catch (io.jsonwebtoken.ExpiredJwtException e) {
                     long expTime = e.getClaims().getExpiration().getTime();
+                    long iatTime = e.getClaims().getIssuedAt() != null ? e.getClaims().getIssuedAt().getTime() : 0;
                     long nowTime = System.currentTimeMillis();
                     long expiredMs = nowTime - expTime;
                     String expiredInfo = expiredMs > 0 ?
-                            String.format("已过期 %d 分钟", expiredMs / 60000) :
+                            String.format("已过期 %d 分钟 (%d秒)", expiredMs / 60000, (expiredMs % 60000) / 1000) :
                             String.format("还未生效 (%d 分钟后生效)", -expiredMs / 60000);
-                    log.warn("❌ WebSocket 认证失败 - Token已过期: sessionId={}, 过期时间={}, 当前时间={}, {}",
-                            session.getId(), e.getClaims().getExpiration(), new Date(nowTime), expiredInfo);
+                    String tokenType = e.getClaims().get("type", String.class);
+                    Long userIdInToken = e.getClaims().get("userId", Long.class);
+                    log.warn("❌ WebSocket 认证失败 - Token已过期: sessionId={}, 当前时间={}, {}",
+                            session.getId(), new Date(nowTime), expiredInfo);
+                    log.warn("   🔍 Token详情: type={}, userId={}, 签发时间={}, 过期时间={}",
+                            tokenType, userIdInToken,
+                            iatTime > 0 ? new Date(iatTime) : "未知",
+                            e.getClaims().getExpiration());
+                    if ("refresh".equals(tokenType)) {
+                        log.warn("   ⚠️ 注意: 客户端误将 RefreshToken 当作 AccessToken 使用于 WebSocket 连接!");
+                    }
                 } catch (io.jsonwebtoken.security.SignatureException e) {
                     log.warn("❌ WebSocket 认证失败 - 签名无效: sessionId={}, 原因: Token签名与服务端secret不匹配，请重新登录",
                             session.getId());
