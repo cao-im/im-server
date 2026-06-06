@@ -115,14 +115,13 @@ public class FriendRequestService {
     }
 
     public List<FriendRequestDTO> getPendingRequests(Long userId) {
-        // 查询涉及该用户的所有待处理好友请求（包括发出的和收到的）
+        // 查询涉及该用户的所有好友请求（包括发出的、收到的、待处理、已接受、已拒绝）
         LambdaQueryWrapper<FriendRequest> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(w -> w
                         .eq(FriendRequest::getToUserId, userId)
                         .or()
                         .eq(FriendRequest::getFromUserId, userId)
         );
-        wrapper.eq(FriendRequest::getStatus, Constants.FriendStatus.PENDING);
         wrapper.orderByDesc(FriendRequest::getCreateTime);
         List<FriendRequest> requests = friendRequestMapper.selectList(wrapper);
 
