@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS im_user (
 CREATE TABLE IF NOT EXISTS im_message (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID(自增)',
     mid BIGINT NOT NULL DEFAULT 0 COMMENT '消息全局唯一ID(雪花算法生成,0表示待分配)',
-    msg_seq BIGINT NOT NULL DEFAULT 0 COMMENT '消息序号(用于排序和去重,保证全局有序)',
     from_id BIGINT NOT NULL COMMENT '发送者ID',
     to_id BIGINT DEFAULT NULL COMMENT '接收者ID(私聊时使用,与group_id互斥)',
     group_id BIGINT DEFAULT NULL COMMENT '群组ID(群聊时使用,与to_id互斥)',
@@ -91,7 +90,6 @@ CREATE TABLE IF NOT EXISTS im_message (
 
     -- 索引优化（高频查询场景）
     UNIQUE KEY uk_mid (mid),                                  -- 消息全局唯一ID（防止雪花算法碰撞）
-    UNIQUE KEY uk_msg_seq (msg_seq),                          -- 消息序号唯一（去重+增量同步）
     INDEX idx_from_id (fromId),                               -- 发送者查询
     INDEX idx_to_id (toId),                                   -- 接收者查询（离线消息拉取）
     INDEX idx_group_id (groupId),                             -- 群组消息查询
@@ -306,19 +304,14 @@ CREATE TABLE IF NOT EXISTS im_group_mute (
 -- ============================================================
 
 -- ============================================================
--- 增量迁移：修复历史数据的 mid=0 / msg_seq=0 问题（仅对已有数据库执行）
--- 说明: 旧消息的 mid 和 msg_seq 默认为 0，需要替换为唯一值才能创建 UNIQUE 索引
--- 策略: 用 id + 大偏移量生成唯一值
---   - mid 偏移 300000000000000000（18位，以3开头）
---   - msg_seq 偏移 100000000000000000（18位，以1开头）
+-- 增量迁移：修复历史数据的 mid=0 问题（仅对已有数据库执行）
+-- 说明: 旧消息的 mid 默认为 0，需要替换为唯一值才能创建 UNIQUE 索引
+-- 策略: 用 id + 大偏移量生成唯一 mid，格式与雪花算法一致(18位，以3开头)
 -- 执行时机: 在已有数据库上执行 schema v7.0 升级时运行
 -- ============================================================
 -- SELECT CONCAT('mid=0 的记录数: ', COUNT(*)) FROM im_message WHERE mid = 0;
--- SELECT CONCAT('msg_seq=0 的记录数: ', COUNT(*)) FROM im_message WHERE msg_seq = 0;
 -- UPDATE im_message SET mid = (300000000000000000 + id) WHERE mid = 0;
--- UPDATE im_message SET msg_seq = (100000000000000000 + id) WHERE msg_seq = 0;
 -- ALTER TABLE im_message ADD UNIQUE KEY uk_mid (mid);
--- ALTER TABLE im_message ADD UNIQUE KEY uk_msg_seq (msg_seq);
 
 SELECT '========================================' AS `line`;
 SELECT '        IM 系统数据库部署完成' AS title;
