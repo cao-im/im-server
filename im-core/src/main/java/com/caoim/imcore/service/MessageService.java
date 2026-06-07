@@ -2,6 +2,7 @@ package com.caoim.imcore.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.caoim.imcore.common.BusinessException;
 import com.caoim.imcore.common.Constants;
@@ -168,12 +169,13 @@ public class MessageService {
                 continue;
             }
 
-            // 使用服务端真实 ID 更新状态
+            // 使用服务端真实 ID 更新状态（仅更新 msgStatus 字段，不影响其他字段）
             Long realMessageId = targetMsg.getId();
-            Message message = new Message();
-            message.setId(realMessageId);
-            message.setMsgStatus(Constants.MessageStatus.READ);
-            messageMapper.updateById(message);
+            messageMapper.update(null,
+                new LambdaUpdateWrapper<Message>()
+                    .eq(Message::getId, realMessageId)
+                    .set(Message::getMsgStatus, Constants.MessageStatus.READ)
+            );
 
             LambdaQueryWrapper<MessageRead> existCheck = new LambdaQueryWrapper<>();
             existCheck.eq(MessageRead::getMsgId, realMessageId)
@@ -196,6 +198,52 @@ public class MessageService {
             log.info("标记消息已读: userId={}, 消息数={}, 回执数={}",
                     userId, messageIds.size(), readRecords.size());
         }
+    }
+
+    /**
+     * 标记消息已送达（接收方确认收到后调用）
+     *
+     * @param mids 客户端生成的消息ID列表（雪花算法）
+     * @return 被更新的消息的发送者ID列表（用于通知发送方）
+     */
+    @Transactional
+    public List<Map<String, Object>> markAsDelivered(List<Long> mids) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        if (mids == null || mids.isEmpty()) {
+            return results;
+        }
+
+        for (Long mid : mids) {
+            LambdaQueryWrapper<Message> query = new LambdaQueryWrapper<>();
+            query.eq(Message::getMid, mid);
+            List<Message> messages = messageMapper.selectList(query);
+
+            if (messages.isEmpty()) {
+                log.warn("标记送达时未找到消息: mid={}", mid);
+                continue;
+            }
+
+            Message msg = messages.get(0);
+
+            // 更新送达状态（仅更新 delivered 字段，不影响 mid 等其他字段）
+            messageMapper.update(null,
+                new LambdaUpdateWrapper<Message>()
+                    .eq(Message::getId, msg.getId())
+                    .set(Message::getDelivered, 1)
+            );
+
+            log.info("消息已标记送达: mid={}, fromId={}, toId={}", mid, msg.getFromId(), msg.getToId());
+
+            // 返回信息用于通知发送方
+            Map<String, Object> result = new HashMap<>();
+            result.put("mid", mid);
+            result.put("fromId", msg.getFromId());
+            result.put("toId", msg.getToId());
+            results.add(result);
+        }
+
+        return results;
     }
 
     public Long getUnreadCount(Long userId) {
@@ -445,6 +493,7 @@ public class MessageService {
 
         msgData.put("msgType", msg.getMsgType());
         msgData.put("msgStatus", msg.getMsgStatus());
+        msgData.put("delivered", msg.getDelivered() != null ? msg.getDelivered() : 0);
 
         if (msg.getCreateTime() != null) {
             long timestamp = msg.getCreateTime()

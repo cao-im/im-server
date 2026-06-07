@@ -121,6 +121,9 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 case "read_receipt":
                     handleReadReceipt(userId, session, msgMap);
                     break;
+                case "delivery_ack":
+                    handleDeliveryAck(userId, session, msgMap);
+                    break;
                 case "ping":
                     sendToUser(session, JSON.toJSONString(Map.of("type", "pong")));
                     break;
@@ -375,6 +378,81 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("处理已读回执异常: ", e);
             sendError(session, "处理已读回执失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理送达回执（delivery_ack）
+     * 接收方收到消息后自动发送，服务端更新 delivered 状态并通知发送方
+     *
+     * @param userId 发送回执的用户ID（即消息接收方）
+     * @param session WebSocket会话
+     * @param msgMap 请求数据
+     */
+    private void handleDeliveryAck(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            // 解析 mids 列表
+            Object midsObj = msgMap.get("mids");
+            if (midsObj == null) {
+                log.warn("送达回执缺少mids参数: userId={}", userId);
+                return;
+            }
+
+            List<Long> mids = new ArrayList<>();
+            if (midsObj instanceof List) {
+                for (Object id : (List<?>) midsObj) {
+                    if (id instanceof Number) {
+                        mids.add(((Number) id).longValue());
+                    } else if (id != null) {
+                        try {
+                            mids.add(Long.parseLong(id.toString()));
+                        } catch (NumberFormatException e) {
+                            log.warn("无效的mid: {}", id);
+                        }
+                    }
+                }
+            } else if (midsObj instanceof Number) {
+                mids.add(((Number) midsObj).longValue());
+            }
+
+            if (mids.isEmpty()) {
+                log.warn("送达回执的mids为空: userId={}", userId);
+                return;
+            }
+
+            log.info("收到送达回执: userId={}, 消息数={}", userId, mids.size());
+
+            // 调用 MessageService 标记已送达
+            List<Map<String, Object>> results = messageService.markAsDelivered(mids);
+
+            // 通知发送方：消息已送达
+            for (Map<String, Object> result : results) {
+                Long fromId = ((Number) result.get("fromId")).longValue();
+                Long mid = ((Number) result.get("mid")).longValue();
+
+                Map<String, Object> confirmation = Map.of(
+                        "type", "delivery_confirmation",
+                        "mid", mid,
+                        "status", "delivered",
+                        "timestamp", System.currentTimeMillis()
+                );
+
+                pushMessageToUser(fromId, JSON.toJSONString(confirmation));
+                log.info("已发送送达确认给发送方: fromId={}, mid={}", fromId, mid);
+            }
+
+            // 发送确认响应给接收方
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "delivery_ack_response");
+            response.put("success", true);
+            response.put("messageCount", mids.size());
+
+            sendToUser(session, JSON.toJSONString(response));
+            log.info("送达回执处理完成: userId={}, 确认消息数={}", userId, mids.size());
+
+        } catch (Exception e) {
+            log.error("处理送达回执异常: ", e);
+            sendError(session, "处理送达回执失败: " + e.getMessage());
         }
     }
 

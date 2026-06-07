@@ -20,6 +20,8 @@ public class Message {
     private Integer msgType;
     /** 消息阅读状态: 0-未读, 1-已读 */
     private Integer msgStatus;
+    /** 送达状态: 0-未送达, 1-已送达（独立于msg_status，发送方视角） */
+    private Integer delivered = 0;
     private Long replyMsgId;
     private String atUserIds;
     private String extra;

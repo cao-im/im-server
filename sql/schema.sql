@@ -1,12 +1,16 @@
 -- ============================================================
--- IM系统数据库初始化脚本（完整版 v6.0）
+-- IM系统数据库初始化脚本（完整版 v7.0）
 -- 数据库: cao_im_db
--- 版本: v6.0 (重构好友系统)
--- 更新时间: 2026-05-31
+-- 版本: v7.0 (送达回执)
+-- 更新时间: 2026-06-07
 -- 说明: 生产级IM数据库设计，支持私聊、群聊、消息撤回、已读回执、
---       黑名单、文件消息、@提醒、消息回复等完整功能
+--       黑名单、文件消息、@提醒、消息回复、送达回执等完整功能
 --
--- 🆕 v6.0 更新内容:
+-- 🆕 v7.0 更新内容:
+--   - im_message 表新增 delivered 字段（送达状态，独立于 msg_status）
+--   - 支持三层ACK机制：send_confirmation → delivery_ack → read_receipt
+--
+-- 📌 v6.0 更新内容:
 --   - 重构好友系统：将 im_friend 表拆分为 im_friend_request + im_contact
 --   - 新增好友申请流程表 (im_friend_request)
 --   - 新增联系人/好友关系表 (im_contact) 支持备注、分组、置顶、免打扰
@@ -79,13 +83,15 @@ CREATE TABLE IF NOT EXISTS im_message (
     content TEXT NOT NULL COMMENT '消息内容',
     msg_type TINYINT DEFAULT 0 COMMENT '消息类型: 0-文本, 1-图片, 2-文件, 3-语音, 4-视频, 5-位置, 6-名片, 7-系统消息, 8-合并消息, 9-表情包',
     msg_status TINYINT DEFAULT 0 COMMENT '消息阅读状态: 0-未读, 1-已读',
+    delivered TINYINT DEFAULT 0 COMMENT '送达状态: 0-未送达, 1-已送达(独立于msg_status,发送方视角)',
     reply_msg_id BIGINT DEFAULT NULL COMMENT '引用/回复的消息ID(实现消息引用功能)',
     at_user_ids VARCHAR(500) DEFAULT '' COMMENT '@的用户ID列表(逗号分隔,如"1001,1002")',
     extra JSON DEFAULT NULL COMMENT '扩展信息(JSON格式,存储消息特有属性,如图片尺寸、语音时长等)',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间',
 
     -- 索引优化（高频查询场景）
-    INDEX idx_msg_seq (msg_seq),                              -- 消息序号索引（增量同步）
+    UNIQUE KEY uk_mid (mid),                                  -- 消息全局唯一ID（防止雪花算法碰撞）
+    UNIQUE KEY uk_msg_seq (msg_seq),                          -- 消息序号唯一（去重+增量同步）
     INDEX idx_from_id (fromId),                               -- 发送者查询
     INDEX idx_to_id (toId),                                   -- 接收者查询（离线消息拉取）
     INDEX idx_group_id (groupId),                             -- 群组消息查询
@@ -298,11 +304,27 @@ CREATE TABLE IF NOT EXISTS im_group_mute (
 -- ============================================================
 -- 部署验证
 -- ============================================================
+
+-- ============================================================
+-- 增量迁移：修复历史数据的 mid=0 / msg_seq=0 问题（仅对已有数据库执行）
+-- 说明: 旧消息的 mid 和 msg_seq 默认为 0，需要替换为唯一值才能创建 UNIQUE 索引
+-- 策略: 用 id + 大偏移量生成唯一值
+--   - mid 偏移 300000000000000000（18位，以3开头）
+--   - msg_seq 偏移 100000000000000000（18位，以1开头）
+-- 执行时机: 在已有数据库上执行 schema v7.0 升级时运行
+-- ============================================================
+-- SELECT CONCAT('mid=0 的记录数: ', COUNT(*)) FROM im_message WHERE mid = 0;
+-- SELECT CONCAT('msg_seq=0 的记录数: ', COUNT(*)) FROM im_message WHERE msg_seq = 0;
+-- UPDATE im_message SET mid = (300000000000000000 + id) WHERE mid = 0;
+-- UPDATE im_message SET msg_seq = (100000000000000000 + id) WHERE msg_seq = 0;
+-- ALTER TABLE im_message ADD UNIQUE KEY uk_mid (mid);
+-- ALTER TABLE im_message ADD UNIQUE KEY uk_msg_seq (msg_seq);
+
 SELECT '========================================' AS `line`;
 SELECT '        IM 系统数据库部署完成' AS title;
 SELECT '========================================' AS `line`;
 
-SELECT CONCAT('版本: v6.0') AS version;
+SELECT CONCAT('版本: v7.0') AS version;
 SELECT CONCAT('数据库: ', DATABASE()) AS database_name;
 SELECT CONCAT('字符集: utf8mb4') AS charset;
 
