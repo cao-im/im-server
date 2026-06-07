@@ -274,7 +274,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             // 构建响应数据（使用 messageToMap 自动包含 senderInfo/groupInfo）
             List<Map<String, Object>> messagesData = new ArrayList<>();
             for (Message msg : offlineMessages) {
-                messagesData.add(MessageService.messageToMap(msg));
+                messagesData.add(messageService.messageToMap(msg));
             }
 
             // 判断是否还有更多数据
@@ -535,7 +535,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         // 构建包含完整sender信息的推送数据
         Object data;
         if (messageData instanceof Message) {
-            data = MessageService.messageToMap((Message) messageData);
+            data = messageService.messageToMap((Message) messageData);
         } else {
             data = messageData;
         }
@@ -600,7 +600,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         // 构建包含完整sender信息和group信息的推送数据
         Object data;
         if (messageData instanceof Message) {
-            data = MessageService.messageToMap((Message) messageData);
+            data = messageService.messageToMap((Message) messageData);
         } else {
             data = messageData;
         }

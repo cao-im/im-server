@@ -334,28 +334,10 @@ public class MessageService {
 
     /**
      * 构建消息的 extra 字段（JSON格式）
-     * 包含发送者的昵称、头像等快照信息，以及群聊时的群组信息
-     * 这样接收方即使没有本地缓存也能正常显示发送者身份
+     * 不再存储 senderInfo/groupInfo，由接收方通过 fromId/groupId 实时查询
      */
     private String buildMessageExtra(Long fromId, Long groupId) {
-        try {
-            Map<String, Object> extraData = new HashMap<>();
-
-            // 1. 构建发送者信息
-            SenderInfo senderInfo = buildSenderInfo(fromId, groupId);
-            extraData.put("senderInfo", senderInfo);
-
-            // 2. 如果是群聊，额外添加群组信息
-            if (groupId != null) {
-                GroupInfoDTO groupInfo = buildGroupInfo(groupId);
-                extraData.put("groupInfo", groupInfo);
-            }
-
-            return JSON.toJSONString(extraData);
-        } catch (Exception e) {
-            log.warn("构建消息extra字段失败, fromId={}, groupId={}, error={}", fromId, groupId, e.getMessage());
-            return null;
-        }
+        return null;
     }
 
     /**
@@ -478,9 +460,9 @@ public class MessageService {
 
     /**
      * 将消息转换为包含完整信息的Map（用于API返回和WebSocket推送）
-     * 自动从extra字段解析出senderInfo和groupInfo并放入返回数据
+     * senderInfo 从用户表实时查询（保证数据最新），groupInfo 从 extra 解析
      */
-    public static Map<String, Object> messageToMap(Message msg) {
+    public Map<String, Object> messageToMap(Message msg) {
         Map<String, Object> msgData = new HashMap<>();
         msgData.put("id", msg.getId());
         msgData.put("mid", msg.getMid());
@@ -505,15 +487,20 @@ public class MessageService {
             msgData.put("timestamp", System.currentTimeMillis());
         }
 
-        // 解析并附加发送者信息和群组信息
-        SenderInfo senderInfo = parseSenderInfo(msg);
-        if (senderInfo != null) {
-            msgData.put("senderInfo", senderInfo);
+        // 发送者信息：从用户表实时查询（不再从 extra 解析，保证昵称/头像最新）
+        if (msg.getFromId() != null) {
+            SenderInfo senderInfo = buildSenderInfo(msg.getFromId(), msg.getGroupId());
+            if (senderInfo != null) {
+                msgData.put("senderInfo", senderInfo);
+            }
         }
 
-        GroupInfoDTO groupInfo = parseGroupInfo(msg);
-        if (groupInfo != null) {
-            msgData.put("groupInfo", groupInfo);
+        // 群组信息：从群组表实时查询（不再从 extra 解析，保证群名/头像最新）
+        if (msg.getGroupId() != null) {
+            GroupInfoDTO groupInfo = buildGroupInfo(msg.getGroupId());
+            if (groupInfo != null) {
+                msgData.put("groupInfo", groupInfo);
+            }
         }
 
         return msgData;

@@ -161,7 +161,7 @@ public class MessageController {
         // 构建响应数据（使用 messageToMap 自动包含 senderInfo/groupInfo）
         List<Map<String, Object>> messagesData = new ArrayList<>();
         for (Message msg : offlineMessages) {
-            messagesData.add(MessageService.messageToMap(msg));
+            messagesData.add(messageService.messageToMap(msg));
         }
 
         boolean hasMore = (offset + offlineMessages.size()) < totalCount;
