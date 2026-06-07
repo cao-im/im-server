@@ -139,11 +139,16 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             String content = (String) msgMap.get("content");
             Integer msgType = msgMap.get("msgType") != null ?
                     Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
+            // 提取客户端生成的 mid（雪花算法）
+            Long clientMid = null;
+            if (msgMap.get("mid") != null) {
+                clientMid = Long.valueOf(msgMap.get("mid").toString());
+            }
 
-            log.info("处理私聊消息: fromId={}, toId={}, content={}", fromId, toId, content);
+            log.info("处理私聊消息: fromId={}, toId={}, content={}, mid={}", fromId, toId, content, clientMid);
 
             // 调用消息服务（会保存消息 + 发布事件，由 Listener 负责推送）
-            Message message = messageService.sendMessage(fromId, toId, null, content, msgType);
+            Message message = messageService.sendMessage(fromId, toId, null, content, msgType, clientMid);
 
             log.info("消息已保存并发布推送事件: messageId={}, fromId={}, toId={}", 
                     message.getId(), fromId, toId);
@@ -173,10 +178,15 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             String content = (String) msgMap.get("content");
             Integer msgType = msgMap.get("msgType") != null ?
                     Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
+            // 提取客户端生成的 mid
+            Long clientMid = null;
+            if (msgMap.get("mid") != null) {
+                clientMid = Long.valueOf(msgMap.get("mid").toString());
+            }
 
-            log.info("处理群聊消息: fromId={}, groupId={}, content={}", fromId, groupId, content);
+            log.info("处理群聊消息: fromId={}, groupId={}, content={}, mid={}", fromId, groupId, content, clientMid);
 
-            Message message = messageService.sendMessage(fromId, null, groupId, content, msgType);
+            Message message = messageService.sendMessage(fromId, null, groupId, content, msgType, clientMid);
 
             log.info("群消息已保存并发布推送事件: messageId={}, groupId={}",
                     message.getId(), groupId);
@@ -304,20 +314,23 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
      */
     private void handleReadReceipt(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
         try {
-            // 解析消息ID列表
-            Object messageIdsObj = msgMap.get("messageIds");
-            
-            if (messageIdsObj == null) {
-                log.warn("已读回执缺少messageIds参数: userId={}", userId);
-                sendError(session, "已读回执缺少messageIds参数");
+            // 优先使用 mids（客户端生成的全局唯一ID），兼容旧的 messageIds
+            Object idsObj = msgMap.get("mids");
+            if (idsObj == null) {
+                idsObj = msgMap.get("messageIds");
+            }
+
+            if (idsObj == null) {
+                log.warn("已读回执缺少mids/messageIds参数: userId={}", userId);
+                sendError(session, "已读回执缺少mids参数");
                 return;
             }
 
             List<Long> messageIds = new ArrayList<>();
-            
+
             // 支持两种格式：List 或 单个Long
-            if (messageIdsObj instanceof List) {
-                for (Object id : (List<?>) messageIdsObj) {
+            if (idsObj instanceof List) {
+                for (Object id : (List<?>) idsObj) {
                     if (id instanceof Number) {
                         messageIds.add(((Number) id).longValue());
                     } else if (id != null) {
@@ -328,19 +341,21 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                         }
                     }
                 }
-            } else if (messageIdsObj instanceof Number) {
-                messageIds.add(((Number) messageIdsObj).longValue());
+            } else if (idsObj instanceof Number) {
+                messageIds.add(((Number) idsObj).longValue());
             }
 
             if (messageIds.isEmpty()) {
-                log.warn("已读回执的messageIds为空: userId={}", userId);
+                log.warn("已读回执的mids为空: userId={}", userId);
                 sendError(session, "消息ID列表不能为空");
                 return;
             }
 
-            log.info("收到WebSocket已读回执: userId={}, 消息数={}", userId, messageIds.size());
+            log.info("收到WebSocket已读回执: userId={}, 消息数={}, 使用mid={}",
+                    userId, messageIds.size(), msgMap.containsKey("mids"));
 
             // 调用完整的markAsRead方法（包含回执记录）
+            // 注意：这里传入的可能是 mid 也可能是服务端 id，由 markAsRead 统一处理
             messageService.markAsRead(messageIds, userId);
 
             // 发送确认响应给客户端
@@ -533,9 +548,12 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         Map<String, Object> confirmation;
         if (messageData instanceof Message) {
             Message msg = (Message) messageData;
+            // 优先使用客户端 mid，如果没有则用服务端 id
+            Long confirmId = msg.getMid() != null && msg.getMid() > 0 ? msg.getMid() : msg.getId();
             confirmation = Map.of(
                     "type", "send_confirmation",
-                    "messageId", msg.getId(),
+                    "mid", confirmId,
+                    "id", msg.getId(),
                     "status", "sent",
                     "timestamp", System.currentTimeMillis()
             );

@@ -42,6 +42,15 @@ public class MessageService {
     private final ApplicationEventPublisher eventPublisher;
 
     public Message sendMessage(Long fromId, Long toId, Long groupId, String content, Integer msgType) {
+        return sendMessage(fromId, toId, groupId, content, msgType, null);
+    }
+
+    /**
+     * 发送消息（支持客户端生成 mid）
+     *
+     * @param clientMid 客户端生成的全局唯一ID（雪花算法），可为null（兼容旧逻辑）
+     */
+    public Message sendMessage(Long fromId, Long toId, Long groupId, String content, Integer msgType, Long clientMid) {
         if (!userService.existsById(fromId)) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND.getCode(), "发送者用户不存在: " + fromId);
         }
@@ -67,6 +76,11 @@ public class MessageService {
         }
 
         Message message = new Message(fromId, toId, groupId, content, msgType);
+
+        // 使用客户端生成的 mid（如果提供了的话）
+        if (clientMid != null && clientMid > 0) {
+            message.setMid(clientMid);
+        }
 
         // 构建发送者信息快照并注入消息的extra字段
         String extraJson = buildMessageExtra(fromId, groupId);
@@ -134,20 +148,41 @@ public class MessageService {
         LocalDateTime now = LocalDateTime.now();
         List<MessageRead> readRecords = new ArrayList<>();
 
-        for (Long messageId : messageIds) {
+        for (Long idOrMid : messageIds) {
+            // 先尝试通过 mid 查找消息（客户端发送的是雪花算法生成的 mid）
+            Message targetMsg = null;
+            LambdaQueryWrapper<Message> midQuery = new LambdaQueryWrapper<>();
+            midQuery.eq(Message::getMid, idOrMid);
+            List<Message> byMid = messageMapper.selectList(midQuery);
+            if (!byMid.isEmpty()) {
+                targetMsg = byMid.get(0);
+            }
+
+            // 如果通过 mid 没找到，回退到按服务端 id 查找（兼容旧逻辑）
+            if (targetMsg == null) {
+                targetMsg = messageMapper.selectById(idOrMid);
+            }
+
+            if (targetMsg == null) {
+                log.warn("标记已读时未找到消息: idOrMid={}, userId={}", idOrMid, userId);
+                continue;
+            }
+
+            // 使用服务端真实 ID 更新状态
+            Long realMessageId = targetMsg.getId();
             Message message = new Message();
-            message.setId(messageId);
+            message.setId(realMessageId);
             message.setMsgStatus(Constants.MessageStatus.READ);
             messageMapper.updateById(message);
 
             LambdaQueryWrapper<MessageRead> existCheck = new LambdaQueryWrapper<>();
-            existCheck.eq(MessageRead::getMsgId, messageId)
+            existCheck.eq(MessageRead::getMsgId, realMessageId)
                      .eq(MessageRead::getUserId, userId);
-            
+
             Long count = messageReadMapper.selectCount(existCheck);
             if (count == 0) {
                 MessageRead readRecord = new MessageRead();
-                readRecord.setMsgId(messageId);
+                readRecord.setMsgId(realMessageId);
                 readRecord.setUserId(userId);
                 readRecord.setReadTime(now);
                 readRecords.add(readRecord);
@@ -158,7 +193,7 @@ public class MessageService {
             for (MessageRead record : readRecords) {
                 messageReadMapper.insert(record);
             }
-            log.info("标记消息已读: userId={}, 消息数={}, 回执数={}", 
+            log.info("标记消息已读: userId={}, 消息数={}, 回执数={}",
                     userId, messageIds.size(), readRecords.size());
         }
     }
