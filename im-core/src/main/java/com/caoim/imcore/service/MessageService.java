@@ -259,75 +259,56 @@ public class MessageService {
     /**
      * 查询离线消息数量（用于分页判断是否还有更多）
      */
+    /**
+     * 查询离线消息数量（用于分页判断是否还有更多）
+     * 离线消息 = delivered=0（未送达）的消息
+     */
     public Long getOfflineMessagesCount(Long userId, Long sinceTimestamp, Long sinceMessageId) {
-        StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append("SELECT COUNT(*) FROM im_message m ");
-        sqlBuilder.append("WHERE m.to_id = {0} ");
-        sqlBuilder.append("AND m.msg_status = {1} ");
-
-        List<Object> params = new ArrayList<>();
-        params.add(userId);
-        params.add(Constants.MessageStatus.UNREAD);
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Message::getToId, userId)
+               .and(w -> w.isNull(Message::getDelivered).or().eq(Message::getDelivered, 0));
 
         if (sinceTimestamp != null && sinceTimestamp > 0) {
             LocalDateTime sinceTime = LocalDateTime.ofInstant(
                 java.time.Instant.ofEpochMilli(sinceTimestamp),
                 java.time.ZoneId.systemDefault()
             );
-            sqlBuilder.append(" AND m.create_time >= {2} ");
-            params.add(sinceTime);
+            wrapper.ge(Message::getCreateTime, sinceTime);
         }
 
         if (sinceMessageId != null && sinceMessageId > 0) {
-            sqlBuilder.append(" AND m.id > {3} ");
-            params.add(sinceMessageId);
+            wrapper.gt(Message::getId, sinceMessageId);
         }
 
-        return messageMapper.selectCount(
-            new LambdaQueryWrapper<Message>().apply(sqlBuilder.toString(), params.toArray())
-        );
+        return messageMapper.selectCount(wrapper);
     }
 
-    public List<Message> getOfflineMessages(Long userId, Long sinceTimestamp, Long sinceMessageId, 
+    /**
+     * 查询离线消息列表（按送达状态：delivered=0 为未送达/离线消息）
+     */
+    public List<Message> getOfflineMessages(Long userId, Long sinceTimestamp, Long sinceMessageId,
                                            int offset, int limit) {
-        StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append("SELECT m.* FROM im_message m ");
-        sqlBuilder.append("WHERE m.to_id = {0} ");
-        sqlBuilder.append("AND m.msg_status = {1} ");
-        
-        sqlBuilder.append("AND m.mid NOT IN (");
-        sqlBuilder.append("  SELECT mr.mid FROM im_message_read mr ");
-        sqlBuilder.append("  WHERE mr.user_id = {0}");
-        sqlBuilder.append(")");
-        
-        List<Object> params = new ArrayList<>();
-        params.add(userId);
-        params.add(Constants.MessageStatus.UNREAD);
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Message::getToId, userId)
+               .and(w -> w.isNull(Message::getDelivered).or().eq(Message::getDelivered, 0))
+               .orderByAsc(Message::getId)
+               .last("LIMIT " + offset + ", " + limit);
 
         if (sinceTimestamp != null && sinceTimestamp > 0) {
             LocalDateTime sinceTime = LocalDateTime.ofInstant(
                 java.time.Instant.ofEpochMilli(sinceTimestamp),
                 java.time.ZoneId.systemDefault()
             );
-            sqlBuilder.append(" AND m.create_time >= {1} ");
-            params.add(sinceTime);
+            wrapper.ge(Message::getCreateTime, sinceTime);
         }
 
         if (sinceMessageId != null && sinceMessageId > 0) {
-            sqlBuilder.append(" AND m.id > {2} ");
-            params.add(sinceMessageId);
+            wrapper.gt(Message::getId, sinceMessageId);
         }
 
-        sqlBuilder.append(" ORDER BY m.id ASC ");
-        sqlBuilder.append(" LIMIT {3}, {4} ");
-        params.add(offset);
-        params.add(limit);
+        List<Message> messages = messageMapper.selectList(wrapper);
 
-        List<Message> messages = messageMapper.selectList(
-            new LambdaQueryWrapper<Message>().apply(sqlBuilder.toString(), params.toArray())
-        );
-
-        log.info("查询离线消息: userId={}, 结果数={}", userId, messages.size());
+        log.info("查询离线消息(按送达状态): userId={}, 结果数={}", userId, messages.size());
 
         return messages;
     }

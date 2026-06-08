@@ -205,6 +205,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     /**
      * 处理离线消息拉取请求
+     * 按送达状态判断：delivered=0 的消息为离线消息（用户未收到）
      * 支持基于时间戳和消息ID的增量同步，分页返回
      *
      * @param userId 请求用户ID

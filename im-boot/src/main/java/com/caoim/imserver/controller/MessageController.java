@@ -115,7 +115,7 @@ public class MessageController {
         return Result.success(messageService.getUnreadCount(userId));
     }
 
-    @Operation(summary = "获取离线消息（增量同步）- 只返回真正的未读消息")
+    @Operation(summary = "获取离线消息（增量同步）- 按送达状态判断：delivered=0 为离线消息")
     @GetMapping("/offline")
     public Result<OfflineMessageResponseDTO> getOfflineMessages(
             HttpServletRequest request,
@@ -142,7 +142,7 @@ public class MessageController {
             offset = 0;
         }
 
-        // 查询真正的离线消息（未读 + 未确认）
+        // 查询离线消息（delivered=0 表示未送达，即离线消息）
         List<Message> offlineMessages = messageService.getOfflineMessages(
                 currentUserId,  // ✅ 使用从JWT提取的用户ID
                 sinceTimestamp,
