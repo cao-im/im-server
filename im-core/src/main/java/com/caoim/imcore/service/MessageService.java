@@ -177,14 +177,16 @@ public class MessageService {
                     .set(Message::getMsgStatus, Constants.MessageStatus.READ)
             );
 
+            // 已读回执使用 mid 作为关联键（与客户端一致）
+            Long msgMid = targetMsg.getMid();
             LambdaQueryWrapper<MessageRead> existCheck = new LambdaQueryWrapper<>();
-            existCheck.eq(MessageRead::getMsgId, realMessageId)
+            existCheck.eq(MessageRead::getMid, msgMid)
                      .eq(MessageRead::getUserId, userId);
 
             Long count = messageReadMapper.selectCount(existCheck);
             if (count == 0) {
                 MessageRead readRecord = new MessageRead();
-                readRecord.setMsgId(realMessageId);
+                readRecord.setMid(msgMid);
                 readRecord.setUserId(userId);
                 readRecord.setReadTime(now);
                 readRecords.add(readRecord);
@@ -293,8 +295,8 @@ public class MessageService {
         sqlBuilder.append("WHERE m.to_id = {0} ");
         sqlBuilder.append("AND m.msg_status = {1} ");
         
-        sqlBuilder.append("AND m.id NOT IN (");
-        sqlBuilder.append("  SELECT mr.msg_id FROM im_message_read mr ");
+        sqlBuilder.append("AND m.mid NOT IN (");
+        sqlBuilder.append("  SELECT mr.mid FROM im_message_read mr ");
         sqlBuilder.append("  WHERE mr.user_id = {0}");
         sqlBuilder.append(")");
         

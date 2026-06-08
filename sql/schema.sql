@@ -244,18 +244,18 @@ CREATE TABLE IF NOT EXISTS im_attachment (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS im_message_read (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '记录ID(自增)',
-    msg_id BIGINT NOT NULL COMMENT '消息ID(im_message.id)',
+    mid BIGINT NOT NULL COMMENT '消息全局唯一ID(im_message.mid)',
     user_id BIGINT NOT NULL COMMENT '已读用户ID',
     group_id BIGINT DEFAULT NULL COMMENT '群组ID(群聊消息必填,私聊可为NULL)',
     read_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '读取时间',
 
     -- 唯一约束：同一用户对同一条消息只记录一次已读
-    UNIQUE KEY uk_msg_user (msg_id, user_id),
+    UNIQUE KEY uk_mid_user (mid, user_id),
 
     -- 索引优化
     INDEX idx_user_read (user_id, read_time),                -- 用户已读历史
     INDEX idx_group_read (group_id, user_id),               -- 群成员已读状态
-    INDEX idx_msg_read (msg_id, read_time)                  -- 消息已读统计
+    INDEX idx_msg_read (mid, read_time)                      -- 消息已读统计
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息已读回执表';
 
 -- ============================================================
@@ -304,14 +304,18 @@ CREATE TABLE IF NOT EXISTS im_group_mute (
 -- ============================================================
 
 -- ============================================================
--- 增量迁移：修复历史数据的 mid=0 问题（仅对已有数据库执行）
--- 说明: 旧消息的 mid 默认为 0，需要替换为唯一值才能创建 UNIQUE 索引
--- 策略: 用 id + 大偏移量生成唯一 mid，格式与雪花算法一致(18位，以3开头)
--- 执行时机: 在已有数据库上执行 schema v7.0 升级时运行
+-- 增量迁移：修复历史数据（仅对已有数据库执行）
 -- ============================================================
+
+-- 1. 修复 im_message.mid=0（旧消息 mid 为默认值0）
 -- SELECT CONCAT('mid=0 的记录数: ', COUNT(*)) FROM im_message WHERE mid = 0;
 -- UPDATE im_message SET mid = (300000000000000000 + id) WHERE mid = 0;
 -- ALTER TABLE im_message ADD UNIQUE KEY uk_mid (mid);
+
+-- 2. 将 im_message_read.msg_id 改名为 mid
+-- ALTER TABLE im_message_read CHANGE COLUMN msg_id mid BIGINT NOT NULL COMMENT '消息全局唯一ID(im_message.mid)';
+-- ALTER TABLE im_message_read DROP INDEX uk_msg_user;
+-- ALTER TABLE im_message_read ADD UNIQUE KEY uk_mid_user (mid, user_id);
 
 SELECT '========================================' AS `line`;
 SELECT '        IM 系统数据库部署完成' AS title;

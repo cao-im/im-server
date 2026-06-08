@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 public class MessageRead {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long msgId;
+    private Long mid;
     private Long userId;
     private Long groupId;
     @TableField(fill = FieldFill.INSERT)
