@@ -7,7 +7,6 @@ import com.caoim.imcore.entity.Message;
 import com.caoim.imcore.service.MessageService;
 import com.caoim.imcore.service.UserService;
 import com.caoim.imcore.util.JwtUtil;
-import com.caoim.imserver.service.RedisWebSocketService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -31,16 +30,14 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     private final MessageService messageService;
     private final UserService userService;
     private final JwtUtil jwtUtil;
-    private final RedisWebSocketService redisWebSocketService;
 
     private static final Map<Long, WebSocketSession> USER_SESSIONS = new ConcurrentHashMap<>();
     private static final Map<WebSocketSession, Long> SESSION_USERS = new ConcurrentHashMap<>();
 
-    public IMWebSocketHandler(MessageService messageService, UserService userService, JwtUtil jwtUtil, RedisWebSocketService redisWebSocketService) {
+    public IMWebSocketHandler(MessageService messageService, UserService userService, JwtUtil jwtUtil) {
         this.messageService = messageService;
         this.userService = userService;
         this.jwtUtil = jwtUtil;
-        this.redisWebSocketService = redisWebSocketService;
     }
 
     @Override
@@ -93,9 +90,6 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         USER_SESSIONS.put(userId, session);
         SESSION_USERS.put(session, userId);
         userService.updateStatus(userId, Constants.UserStatus.ONLINE);
-
-        String sessionId = session.getId();
-        redisWebSocketService.userOnline(userId, sessionId);
 
         log.info("用户 {} 已连接 WebSocket, 当前在线人数: {}", userId, USER_SESSIONS.size());
     }
@@ -463,9 +457,6 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             USER_SESSIONS.remove(userId);
             userService.updateStatus(userId, Constants.UserStatus.OFFLINE);
 
-            String sessionId = session.getId();
-            redisWebSocketService.userOffline(userId, sessionId);
-
             log.info("用户 {} 断开连接, 原因: {}, 当前在线人数: {}", userId, status, USER_SESSIONS.size());
         } else {
             log.debug("未知会话断开: sessionId={}, 原因: {}", session.getId(), status);
@@ -668,14 +659,11 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     public boolean isUserOnline(Long userId) {
         WebSocketSession session = USER_SESSIONS.get(userId);
-        if (session != null && session.isOpen()) {
-            return true;
-        }
-        return redisWebSocketService.isUserOnline(userId);
+        return session != null && session.isOpen();
     }
 
     public int getOnlineCount() {
-        return redisWebSocketService.getOnlineCount();
+        return USER_SESSIONS.size();
     }
 
     public int getOnlineUserCount() {

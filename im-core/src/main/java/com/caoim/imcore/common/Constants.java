@@ -2,10 +2,6 @@ package com.caoim.imcore.common;
 
 public class Constants {
     public static final String TOKEN_PREFIX = "Bearer ";
-    public static final String REDIS_PREFIX = "cao-im:";
-    public static final String USER_KEY = REDIS_PREFIX + "user:";
-    public static final String ONLINE_USERS = REDIS_PREFIX + "online:users";
-    public static final String WS_SESSIONS = REDIS_PREFIX + "ws:sessions:";
 
     public static class UserStatus {
         public static final int OFFLINE = 0;
