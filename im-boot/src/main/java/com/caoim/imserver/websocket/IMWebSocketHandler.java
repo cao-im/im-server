@@ -118,6 +118,9 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 case "get_offline_messages":
                     handleGetOfflineMessages(userId, session, msgMap);
                     break;
+                case "group_offline_sync":
+                    handleGroupOfflineSync(userId, session, msgMap);
+                    break;
                 case "read_receipt":
                     handleReadReceipt(userId, session, msgMap);
                     break;
@@ -370,6 +373,69 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("处理离线消息请求异常: ", e);
             sendError(session, "获取离线消息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理群聊离线消息同步请求
+     * 客户端传入 groupId + sinceMid，服务端返回该群中 mid > sinceMid 的所有消息
+     */
+    private void handleGroupOfflineSync(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Object groupIdObj = msgMap.get("groupId");
+            if (groupIdObj == null) {
+                sendError(session, "缺少 groupId 参数");
+                return;
+            }
+
+            Long groupId = Long.valueOf(groupIdObj.toString());
+            Long sinceMid = 0L;
+            if (msgMap.get("sinceMid") != null) {
+                sinceMid = Long.valueOf(msgMap.get("sinceMid").toString());
+            }
+
+            int limit = 50;
+            if (msgMap.get("limit") != null) {
+                limit = Integer.valueOf(msgMap.get("limit").toString());
+                if (limit <= 0 || limit > 200) limit = 50;
+            }
+
+            log.info("处理群聊离线消息同步: userId={}, groupId={}, sinceMid={}, limit={}",
+                    userId, groupId, sinceMid, limit);
+
+            // 查询该群的离线消息（mid > sinceMid）
+            List<Message> groupOfflineMessages = messageService.getGroupOfflineMessages(
+                    groupId, sinceMid, limit);
+
+            // 构建响应数据
+            List<Map<String, Object>> messagesData = new ArrayList<>();
+            for (Message msg : groupOfflineMessages) {
+                messagesData.add(messageService.messageToMap(msg));
+            }
+
+            boolean hasMore = groupOfflineMessages.size() >= limit;
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "group_offline_sync");
+            response.put("groupId", groupId);
+            response.put("messages", messagesData);
+            response.put("count", groupOfflineMessages.size());
+            response.put("hasMore", hasMore);
+            response.put("sinceMid", sinceMid);
+
+            String jsonResponse = JSON.toJSONString(response);
+
+            log.info("群聊离线消息同步结果: userId={}, groupId={}, 返回数量={}, hasMore={}",
+                    userId, groupId, groupOfflineMessages.size(), hasMore);
+
+            sendToUser(session, jsonResponse);
+
+        } catch (NumberFormatException e) {
+            log.error("群聊离线消息参数格式错误: ", e);
+            sendError(session, "参数格式错误: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("处理群聊离线消息请求异常: ", e);
+            sendError(session, "群聊离线消息同步失败: " + e.getMessage());
         }
     }
 

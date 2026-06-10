@@ -339,6 +339,28 @@ public class MessageService {
         return messages;
     }
 
+    /**
+     * 查询群聊离线消息（按 groupId + sinceMid 增量查询）
+     * 用于客户端上线后补拉群聊中未收到的消息
+     *
+     * @param groupId   群组ID
+     * @param sinceMid 客户端本地该群的最后一条消息mid，查大于此值的消息
+     * @param limit     每页数量
+     * @return 离线消息列表
+     */
+    public List<Message> getGroupOfflineMessages(Long groupId, Long sinceMid, int limit) {
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Message::getGroupId, groupId)
+               .gt(Message::getMid, sinceMid)
+               .orderByAsc(Message::getId)
+               .last("LIMIT " + Math.min(limit, 200));
+
+        List<Message> messages = messageMapper.selectList(wrapper);
+
+        log.info("查询群聊离线消息: groupId={}, sinceMid={}, 结果数={}", groupId, sinceMid, messages.size());
+        return messages;
+    }
+
     // ==================== 发送者信息快照构建 ====================
 
     /**
