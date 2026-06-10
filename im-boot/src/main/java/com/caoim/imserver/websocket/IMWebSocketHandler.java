@@ -109,6 +109,12 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 case "group":
                     handleGroupMessage(userId, msgMap);
                     break;
+                case "group_get":
+                    handleGetGroupHistoryMessages(userId, session, msgMap);
+                    break;
+                case "private_get":
+                    handleGetPrivateHistoryMessages(userId, session, msgMap);
+                    break;
                 case "get_offline_messages":
                     handleGetOfflineMessages(userId, session, msgMap);
                     break;
@@ -171,7 +177,15 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     private void handleGroupMessage(Long fromId, Map<String, Object> msgMap) {
         try {
-            Long groupId = Long.valueOf(msgMap.get("groupId").toString());
+            // 优先取 groupId，兼容旧版客户端可能将群ID放在 toId 中的情况
+            Object groupIdObj = msgMap.get("groupId");
+            if (groupIdObj == null) {
+                groupIdObj = msgMap.get("toId");
+            }
+            if (groupIdObj == null) {
+                throw new BusinessException("群消息缺少 groupId 参数");
+            }
+            Long groupId = Long.valueOf(groupIdObj.toString());
             String content = (String) msgMap.get("content");
             Integer msgType = msgMap.get("msgType") != null ?
                     Integer.valueOf(msgMap.get("msgType").toString()) : Constants.MessageType.TEXT;
@@ -212,6 +226,63 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
      * @param session WebSocket会话
      * @param msgMap 请求参数
      */
+    /**
+     * 处理获取群聊历史消息请求
+     */
+    private void handleGetGroupHistoryMessages(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Object groupIdObj = msgMap.get("groupId");
+            if (groupIdObj == null) {
+                sendError(session, "缺少 groupId 参数");
+                return;
+            }
+            Long groupId = Long.valueOf(groupIdObj.toString());
+            int page = msgMap.get("page") != null ? Integer.valueOf(msgMap.get("page").toString()) : 1;
+            int size = msgMap.get("size") != null ? Integer.valueOf(msgMap.get("size").toString()) : 20;
+
+            List<Map<String, Object>> messages = messageService.getGroupHistoryMessages(groupId, userId, page, size);
+            sendToUser(session, JSON.toJSONString(Map.of(
+                "type", "group_history",
+                "groupId", groupId,
+                "page", page,
+                "messages", messages
+            )));
+        } catch (Exception e) {
+            log.error("获取群聊历史消息失败: ", e);
+            sendError(session, "获取群聊历史消息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理获取私聊历史消息请求
+     */
+    private void handleGetPrivateHistoryMessages(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Object targetIdObj = msgMap.get("targetId");
+            if (targetIdObj == null) {
+                targetIdObj = msgMap.get("toId");
+            }
+            if (targetIdObj == null) {
+                sendError(session, "缺少 targetId 参数");
+                return;
+            }
+            Long targetId = Long.valueOf(targetIdObj.toString());
+            int page = msgMap.get("page") != null ? Integer.valueOf(msgMap.get("page").toString()) : 1;
+            int size = msgMap.get("size") != null ? Integer.valueOf(msgMap.get("size").toString()) : 20;
+
+            List<Map<String, Object>> messages = messageService.getPrivateHistoryMessages(userId, targetId, page, size);
+            sendToUser(session, JSON.toJSONString(Map.of(
+                "type", "private_history",
+                "targetId", targetId,
+                "page", page,
+                "messages", messages
+            )));
+        } catch (Exception e) {
+            log.error("获取私聊历史消息失败: ", e);
+            sendError(session, "获取私聊历史消息失败: " + e.getMessage());
+        }
+    }
+
     private void handleGetOfflineMessages(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
         try {
             // 解析请求参数

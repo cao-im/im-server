@@ -126,6 +126,32 @@ public class MessageService {
         return messageMapper.selectPage(new Page<>(page, size), wrapper);
     }
 
+    /**
+     * 获取群聊历史消息（WebSocket用，返回Map列表）
+     */
+    public List<Map<String, Object>> getGroupHistoryMessages(Long groupId, Long userId, int page, int size) {
+        Page<Message> result = getGroupMessages(groupId, page, size);
+        List<Map<String, Object>> messages = new ArrayList<>();
+        for (Message msg : result.getRecords()) {
+            messages.add(messageToMap(msg));
+        }
+        log.info("获取群聊历史消息: groupId={}, page={}, 结果数={}", groupId, page, messages.size());
+        return messages;
+    }
+
+    /**
+     * 获取私聊历史消息（WebSocket用，返回Map列表）
+     */
+    public List<Map<String, Object>> getPrivateHistoryMessages(Long userId, Long targetId, int page, int size) {
+        Page<Message> result = getPrivateMessages(userId, targetId, page, size);
+        List<Map<String, Object>> messages = new ArrayList<>();
+        for (Message msg : result.getRecords()) {
+            messages.add(messageToMap(msg));
+        }
+        log.info("获取私聊历史消息: userId={}, targetId={}, page={}, 结果数={}", userId, targetId, page, messages.size());
+        return messages;
+    }
+
     public List<Message> getRecentMessages(Long userId, int limit) {
         // 直接查询发给用户或用户发出的最近消息
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
