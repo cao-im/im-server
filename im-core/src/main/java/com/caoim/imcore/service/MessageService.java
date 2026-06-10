@@ -377,16 +377,24 @@ public class MessageService {
     private SenderInfo buildSenderInfo(Long fromId, Long groupId) {
         User user = userService.getUserInfo(fromId);
 
-        String nickname = user != null ? user.getNickname() : null;
-        String avatar = user != null ? user.getAvatar() : null;
+        // nickname 为空时回退到 username，确保总有可显示的名称
+        String displayName = null;
+        String avatar = null;
+        if (user != null) {
+            displayName = user.getNickname();
+            if (displayName == null || displayName.trim().isEmpty()) {
+                displayName = user.getUsername(); // 回退到用户名
+            }
+            avatar = user.getAvatar();
+        }
 
-        // 如果是群聊，尝试获取群昵称
+        // 如果是群聊，尝试获取群昵称（优先级最高）
         String groupNickname = null;
         if (groupId != null) {
             groupNickname = getGroupMemberNickname(fromId, groupId);
         }
 
-        return new SenderInfo(fromId, nickname, avatar, groupNickname);
+        return new SenderInfo(fromId, displayName, avatar, groupNickname);
     }
 
     /**
