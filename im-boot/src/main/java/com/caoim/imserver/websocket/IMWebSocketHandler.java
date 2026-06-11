@@ -763,6 +763,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                     "type", "send_confirmation",
                     "mid", confirmId,
                     "id", msg.getId(),
+                    "seq", msg.getSeq(),
                     "status", "sent",
                     "timestamp", System.currentTimeMillis()
             );

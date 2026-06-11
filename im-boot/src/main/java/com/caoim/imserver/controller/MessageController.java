@@ -179,4 +179,14 @@ public class MessageController {
 
         return Result.success(response);
     }
+
+    @Operation(summary = "获取群组消息最大seq（用于离线增量同步基准）")
+    @GetMapping("/max-seq")
+    public Result<Map<String, Object>> getMaxSeq(@RequestParam Long groupId) {
+        Long maxSeq = messageService.getMaxSeq(groupId);
+        Map<String, Object> result = new HashMap<>();
+        result.put("groupId", groupId);
+        result.put("maxSeq", maxSeq != null ? maxSeq : 0);
+        return Result.success(result);
+    }
 }

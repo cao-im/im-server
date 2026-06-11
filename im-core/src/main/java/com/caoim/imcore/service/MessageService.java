@@ -380,6 +380,21 @@ public class MessageService {
         return messages;
     }
 
+    /**
+     * 查询指定群组中消息的最大 seq
+     */
+    public Long getMaxSeq(Long groupId) {
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Message::getGroupId, groupId)
+               .isNotNull(Message::getSeq)
+               .gt(Message::getSeq, 0)
+               .orderByDesc(Message::getSeq)
+               .last("LIMIT 1");
+
+        Message msg = messageMapper.selectOne(wrapper);
+        return msg != null ? msg.getSeq() : null;
+    }
+
     // ==================== 发送者信息快照构建 ====================
 
     /**
