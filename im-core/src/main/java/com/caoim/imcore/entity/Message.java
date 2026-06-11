@@ -12,6 +12,8 @@ public class Message {
     private Long id;
     /** 消息全局唯一ID(雪花算法生成, 0表示待分配) */
     private Long mid = 0L;
+    /** 消息序号(服务端雪花ID生成,用于增量离线同步) */
+    private Long seq = 0L;
     private Long fromId;
     private Long toId;
     private Long groupId;

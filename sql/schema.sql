@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS im_user (
 CREATE TABLE IF NOT EXISTS im_message (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID(自增)',
     mid BIGINT NOT NULL DEFAULT 0 COMMENT '消息全局唯一ID(雪花算法生成,0表示待分配)',
+    seq BIGINT NOT NULL DEFAULT 0 COMMENT '消息序号(服务端雪花ID,用于增量查询排序,与mid同算法)',
     from_id BIGINT NOT NULL COMMENT '发送者ID',
     to_id BIGINT DEFAULT NULL COMMENT '接收者ID(私聊时使用,与group_id互斥)',
     group_id BIGINT DEFAULT NULL COMMENT '群组ID(群聊时使用,与to_id互斥)',
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS im_message (
 
     -- 索引优化（高频查询场景）
     UNIQUE KEY uk_mid (mid),                                  -- 消息全局唯一ID（防止雪花算法碰撞）
+    INDEX idx_seq (seq),                                     -- 消息序号（增量离线同步查询）
     INDEX idx_from_id (fromId),                               -- 发送者查询
     INDEX idx_to_id (toId),                                   -- 接收者查询（离线消息拉取）
     INDEX idx_group_id (groupId),                             -- 群组消息查询
@@ -316,6 +318,11 @@ CREATE TABLE IF NOT EXISTS im_group_mute (
 -- ALTER TABLE im_message_read CHANGE COLUMN msg_id mid BIGINT NOT NULL COMMENT '消息全局唯一ID(im_message.mid)';
 -- ALTER TABLE im_message_read DROP INDEX uk_msg_user;
 -- ALTER TABLE im_message_read ADD UNIQUE KEY uk_mid_user (mid, user_id);
+
+-- 3. 新增 seq 字段（服务端雪花ID序号，用于增量离线同步，与mid同算法但由服务端生成）
+-- ALTER TABLE im_message ADD COLUMN seq BIGINT NOT NULL DEFAULT 0 COMMENT '消息序号(服务端雪花ID,用于增量查询排序)' AFTER mid;
+-- UPDATE im_message SET seq = id WHERE seq = 0;
+-- ALTER TABLE im_message ADD INDEX idx_seq (seq);
 
 SELECT '========================================' AS `line`;
 SELECT '        IM 系统数据库部署完成' AS title;

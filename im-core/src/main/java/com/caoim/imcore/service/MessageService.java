@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.caoim.imcore.common.BusinessException;
 import com.caoim.imcore.common.Constants;
 import com.caoim.imcore.common.ErrorCode;
+import com.caoim.imcore.common.SnowflakeIdGenerator;
 import com.caoim.imcore.dao.MessageMapper;
 import com.caoim.imcore.dao.MessageReadMapper;
 import com.caoim.imcore.dao.GroupMemberMapper;
@@ -78,9 +79,15 @@ public class MessageService {
 
         Message message = new Message(fromId, toId, groupId, content, msgType);
 
-        // 使用客户端生成的 mid（如果提供了的话）
-        if (clientMid != null && clientMid > 0) {
+        // 使用客户端生成的 mid（如果提供了且是合法的雪花ID）
+        if (clientMid != null && SnowflakeIdGenerator.isValidSnowflakeId(clientMid)) {
             message.setMid(clientMid);
+        } else {
+            // 客户端未传 mid 或 mid 不合法（如旧客户端、非雪花算法），服务端自动生成
+            if (clientMid != null && clientMid > 0) {
+                log.warn("⚠️ 客户端传来的 mid 不是合法的雪花ID: mid={}，将使用服务端生成的雪花ID", clientMid);
+            }
+            message.setMid(SnowflakeIdGenerator.getInstance().nextId());
         }
 
         // 构建发送者信息快照并注入消息的extra字段
@@ -90,6 +97,10 @@ public class MessageService {
         log.info("📤 [消息发送] fromId={}, toId={}, groupId={}, extra={}", fromId, toId, groupId, extraJson);
 
         messageMapper.insert(message);
+
+        // 生成服务端雪花ID作为 seq（与 mid 同理，但完全由服务端控制，不受客户端影响）
+        message.setSeq(SnowflakeIdGenerator.getInstance().nextId());
+        messageMapper.updateById(message);
 
         eventPublisher.publishEvent(new MessageSentEvent(this, message, fromId, toId, groupId));
 
@@ -340,24 +351,32 @@ public class MessageService {
     }
 
     /**
-     * 查询群聊离线消息（按 groupId + sinceMid 增量查询）
-     * 用于客户端上线后补拉群聊中未收到的消息
+     * 查询群聊离线消息（按 groupId + sinceSeq 增量查询）
+     * 使用服务端生成的 seq 字段，不依赖客户端 mid
      *
      * @param groupId   群组ID
-     * @param sinceMid 客户端本地该群的最后一条消息mid，查大于此值的消息
+     * @param sinceSeq 客户端本地该群最后一条消息的 seq（服务端生成），查大于此值的消息
      * @param limit     每页数量
      * @return 离线消息列表
      */
-    public List<Message> getGroupOfflineMessages(Long groupId, Long sinceMid, int limit) {
+    public List<Message> getGroupOfflineMessages(Long groupId, Long sinceSeq, int limit) {
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Message::getGroupId, groupId)
-               .gt(Message::getMid, sinceMid)
-               .orderByAsc(Message::getId)
+        wrapper.eq(Message::getGroupId, groupId);
+
+        // 使用服务端的 seq 做增量查询（seq 严格递增，不受客户端 mid 影响）
+        if (sinceSeq != null && sinceSeq > 0) {
+            wrapper.gt(Message::getSeq, sinceSeq);
+            log.info("查询群聊离线消息(增量): groupId={}, sinceSeq={}", groupId, sinceSeq);
+        } else {
+            log.info("查询群聊离线消息(全量): groupId={}, sinceSeq=0(首次同步)", groupId);
+        }
+
+        wrapper.orderByAsc(Message::getSeq)
                .last("LIMIT " + Math.min(limit, 200));
 
         List<Message> messages = messageMapper.selectList(wrapper);
 
-        log.info("查询群聊离线消息: groupId={}, sinceMid={}, 结果数={}", groupId, sinceMid, messages.size());
+        log.info("查询群聊离线消息结果: groupId={}, sinceSeq={}, 结果数={}", groupId, sinceSeq, messages.size());
         return messages;
     }
 
@@ -505,6 +524,7 @@ public class MessageService {
         Map<String, Object> msgData = new HashMap<>();
         msgData.put("id", msg.getId());
         msgData.put("mid", msg.getMid());
+        msgData.put("seq", msg.getSeq());  // 服务端序号，用于增量离线同步
         msgData.put("fromId", msg.getFromId());
         msgData.put("toId", msg.getToId());
         msgData.put("groupId", msg.getGroupId());

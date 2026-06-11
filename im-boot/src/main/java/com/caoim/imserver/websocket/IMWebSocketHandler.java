@@ -389,9 +389,11 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             }
 
             Long groupId = Long.valueOf(groupIdObj.toString());
-            Long sinceMid = 0L;
-            if (msgMap.get("sinceMid") != null) {
-                sinceMid = Long.valueOf(msgMap.get("sinceMid").toString());
+
+            // 使用服务端 seq 做增量查询
+            Long sinceSeq = 0L;
+            if (msgMap.get("sinceSeq") != null) {
+                sinceSeq = Long.valueOf(msgMap.get("sinceSeq").toString());
             }
 
             int limit = 50;
@@ -400,12 +402,12 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 if (limit <= 0 || limit > 200) limit = 50;
             }
 
-            log.info("处理群聊离线消息同步: userId={}, groupId={}, sinceMid={}, limit={}",
-                    userId, groupId, sinceMid, limit);
+            log.info("处理群聊离线消息同步: userId={}, groupId={}, sinceSeq={}, limit={}",
+                    userId, groupId, sinceSeq, limit);
 
-            // 查询该群的离线消息（mid > sinceMid）
+            // 查询该群的离线消息（seq > sinceSeq）
             List<Message> groupOfflineMessages = messageService.getGroupOfflineMessages(
-                    groupId, sinceMid, limit);
+                    groupId, sinceSeq, limit);
 
             // 构建响应数据
             List<Map<String, Object>> messagesData = new ArrayList<>();
@@ -421,7 +423,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             response.put("messages", messagesData);
             response.put("count", groupOfflineMessages.size());
             response.put("hasMore", hasMore);
-            response.put("sinceMid", sinceMid);
+            response.put("sinceSeq", sinceSeq);
 
             String jsonResponse = JSON.toJSONString(response);
 
