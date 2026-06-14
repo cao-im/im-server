@@ -579,4 +579,71 @@ public class MessageService {
 
         return msgData;
     }
+
+    /**
+     * 撤回消息
+     * 规则：只能撤回自己发送的消息，且在2分钟内
+     *
+     * @param messageId 消息ID（支持mid或服务端id）
+     * @param userId    操作用户ID
+     * @return 被撤回的消息
+     */
+    @Transactional
+    public Message recallMessage(Long messageId, Long userId) {
+        // 查找消息
+        Message targetMsg = null;
+        LambdaQueryWrapper<Message> midQuery = new LambdaQueryWrapper<>();
+        midQuery.eq(Message::getMid, messageId);
+        List<Message> byMid = messageMapper.selectList(midQuery);
+        if (!byMid.isEmpty()) {
+            targetMsg = byMid.get(0);
+        }
+
+        if (targetMsg == null) {
+            targetMsg = messageMapper.selectById(messageId);
+        }
+
+        if (targetMsg == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "消息不存在: " + messageId);
+        }
+
+        // 检查是否是自己的消息
+        if (!userId.equals(targetMsg.getFromId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), "只能撤回自己发送的消息");
+        }
+
+        // 检查是否已经撤回
+        if (targetMsg.getMsgStatus() != null && targetMsg.getMsgStatus() == -2) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "消息已被撤回");
+        }
+
+        // 检查撤回时间窗口（2分钟）
+        if (targetMsg.getCreateTime() != null) {
+            long msgTime = targetMsg.getCreateTime()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli();
+            long now = System.currentTimeMillis();
+            long recallWindowMs = 2 * 60 * 1000; // 2分钟
+
+            if (now - msgTime > recallWindowMs) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "超过2分钟无法撤回");
+            }
+        }
+
+        // 更新消息状态为已撤回（-2）
+        messageMapper.update(null,
+            new LambdaUpdateWrapper<Message>()
+                .eq(Message::getId, targetMsg.getId())
+                .set(Message::getMsgStatus, -2)
+                .set(Message::getContent, "[消息已撤回]")
+        );
+
+        log.info("消息已撤回: messageId={}, userId={}, fromId={}", messageId, userId, targetMsg.getFromId());
+
+        // 返回更新后的消息
+        targetMsg.setMsgStatus(-2);
+        targetMsg.setContent("[消息已撤回]");
+        return targetMsg;
+    }
 }

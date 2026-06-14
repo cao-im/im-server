@@ -127,6 +127,9 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 case "delivery_ack":
                     handleDeliveryAck(userId, session, msgMap);
                     break;
+                case "recall_message":
+                    handleRecallMessage(userId, session, msgMap);
+                    break;
                 case "ping":
                     sendToUser(session, JSON.toJSONString(Map.of("type", "pong")));
                     break;
@@ -587,6 +590,77 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("处理送达回执异常: ", e);
             sendError(session, "处理送达回执失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理消息撤回
+     * 客户端发送撤回请求，服务端验证并执行撤回，然后通知相关方
+     *
+     * @param userId  操作用户ID
+     * @param session WebSocket会话
+     * @param msgMap  请求数据
+     */
+    private void handleRecallMessage(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Object messageIdObj = msgMap.get("messageId");
+            if (messageIdObj == null) {
+                sendError(session, "缺少 messageId 参数");
+                return;
+            }
+
+            Long messageId = Long.valueOf(messageIdObj.toString());
+
+            log.info("收到消息撤回请求: userId={}, messageId={}", userId, messageId);
+
+            // 调用消息服务执行撤回
+            Message recalledMessage = messageService.recallMessage(messageId, userId);
+
+            // 发送确认响应给操作者
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "recall_message_ack");
+            response.put("success", true);
+            response.put("messageId", messageId);
+            response.put("timestamp", System.currentTimeMillis());
+
+            sendToUser(session, JSON.toJSONString(response));
+
+            // 通知接收方（私聊）或群成员（群聊）
+            Map<String, Object> recallNotification = new HashMap<>();
+            recallNotification.put("type", "recall_message");
+            recallNotification.put("messageId", recalledMessage.getMid());
+            recallNotification.put("fromId", recalledMessage.getFromId());
+            recallNotification.put("timestamp", System.currentTimeMillis());
+
+            if (recalledMessage.getGroupId() != null) {
+                // 群聊消息：通知群成员
+                recallNotification.put("groupId", recalledMessage.getGroupId());
+                String notificationJson = JSON.toJSONString(recallNotification);
+
+                for (Map.Entry<Long, WebSocketSession> entry : USER_SESSIONS.entrySet()) {
+                    if (!entry.getKey().equals(userId)) {
+                        pushMessageToUser(entry.getKey(), notificationJson);
+                    }
+                }
+                log.info("群聊消息撤回通知已发送: groupId={}, messageId={}", recalledMessage.getGroupId(), messageId);
+            } else if (recalledMessage.getToId() != null) {
+                // 私聊消息：通知接收方
+                recallNotification.put("toId", recalledMessage.getToId());
+                pushMessageToUser(recalledMessage.getToId(), JSON.toJSONString(recallNotification));
+                log.info("私聊消息撤回通知已发送: toId={}, messageId={}", recalledMessage.getToId(), messageId);
+            }
+
+            log.info("消息撤回处理完成: userId={}, messageId={}", userId, messageId);
+
+        } catch (BusinessException e) {
+            log.error("消息撤回失败: {}", e.getMessage());
+            sendError(session, e.getMessage());
+        } catch (NumberFormatException e) {
+            log.error("消息撤回参数格式错误: ", e);
+            sendError(session, "参数格式错误: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("处理消息撤回异常: ", e);
+            sendError(session, "消息撤回失败: " + e.getMessage());
         }
     }
 
