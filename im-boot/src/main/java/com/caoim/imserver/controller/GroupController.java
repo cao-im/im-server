@@ -5,8 +5,10 @@ import com.caoim.imcore.dto.GroupCreateDTO;
 import com.caoim.imcore.entity.Group;
 import com.caoim.imcore.entity.GroupMember;
 import com.caoim.imcore.service.GroupService;
+import com.caoim.imserver.common.UserContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,55 +24,94 @@ public class GroupController {
 
     @Operation(summary = "创建群组")
     @PostMapping("/create")
-    public Result<Group> createGroup(@RequestParam("ownerId") Long ownerId, @RequestBody GroupCreateDTO dto) {
-        return Result.success(groupService.createGroup(ownerId, dto));
+    public Result<Group> createGroup(
+            HttpServletRequest request,
+            @RequestParam(value = "ownerId", required = false) Long ownerId,
+            @RequestBody GroupCreateDTO dto) {
+        Long actorId = UserContext.resolveActor(request, ownerId);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        return Result.success(groupService.createGroup(actorId, dto));
     }
 
-    @Operation(summary = "获取用户的群组列表")
     @GetMapping("/list")
-    public Result<List<Group>> getUserGroups(@RequestParam("userId") Long userId) {
-        return Result.success(groupService.getUserGroups(userId));
+    public Result<List<Group>> getUserGroups(
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        Long actorId = UserContext.resolveActor(request, userId);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        return Result.success(groupService.getUserGroups(actorId));
     }
 
     @Operation(summary = "获取群组信息")
     @GetMapping("/{groupId}")
-    public Result<Group> getGroupInfo(@PathVariable Long groupId) {
+    public Result<Group> getGroupInfo(HttpServletRequest request, @PathVariable Long groupId) {
+        if (!UserContext.isInternalCall(request)) {
+            Long actorId = UserContext.getCurrentUserId(request);
+            if (actorId == null) {
+                return Result.error(401, "未认证或Token无效");
+            }
+            groupService.requireMember(groupId, actorId);
+        }
         return Result.success(groupService.getGroupInfo(groupId));
     }
 
     @Operation(summary = "添加群成员")
     @PostMapping("/{groupId}/member")
     public Result<Void> addMember(
+            HttpServletRequest request,
             @PathVariable Long groupId,
             @RequestParam("userId") Long userId,
-            @RequestParam("operatorId") Long operatorId) {
-        groupService.addMember(groupId, userId, operatorId);
+            @RequestParam(value = "operatorId", required = false) Long operatorId) {
+        Long actorId = UserContext.resolveActor(request, operatorId);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        groupService.addMember(groupId, userId, actorId);
         return Result.success();
     }
 
-    @Operation(summary = "移除群成员")
     @DeleteMapping("/{groupId}/member/{userId}")
     public Result<Void> removeMember(
+            HttpServletRequest request,
             @PathVariable Long groupId,
             @PathVariable Long userId,
-            @RequestParam("operatorId") Long operatorId) {
-        groupService.removeMember(groupId, userId, operatorId);
+            @RequestParam(value = "operatorId", required = false) Long operatorId) {
+        Long actorId = UserContext.resolveActor(request, operatorId);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        groupService.removeMember(groupId, userId, actorId);
         return Result.success();
     }
 
     @Operation(summary = "获取群成员列表")
     @GetMapping("/{groupId}/members")
-    public Result<List<GroupMember>> getGroupMembers(@PathVariable Long groupId) {
+    public Result<List<GroupMember>> getGroupMembers(HttpServletRequest request, @PathVariable Long groupId) {
+        Long actorId = UserContext.resolveActor(request, null);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        groupService.requireMember(groupId, actorId);
         return Result.success(groupService.getGroupMembers(groupId));
     }
 
     @Operation(summary = "更新群组信息")
     @PutMapping("/{groupId}")
     public Result<Void> updateGroupInfo(
+            HttpServletRequest request,
             @PathVariable Long groupId,
             @RequestParam(value = "name", required = false) String name,
-            @RequestParam(value = "avatar", required = false) String avatar) {
-        groupService.updateGroupInfo(groupId, name, avatar);
+            @RequestParam(value = "avatar", required = false) String avatar,
+            @RequestParam(value = "operatorId", required = false) Long operatorId) {
+        Long actorId = UserContext.resolveActor(request, operatorId);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        groupService.updateGroupInfo(groupId, name, avatar, actorId);
         return Result.success();
     }
 }

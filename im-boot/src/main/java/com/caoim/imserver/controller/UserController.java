@@ -52,6 +52,20 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "为尚未设置密码的 IM 用户绑定密码", description = "仅允许携带内部令牌的服务调用，且不会覆盖已有密码")
+    @PostMapping("/bind-password")
+    public Result<Void> bindPassword(@RequestBody LoginDTO dto, HttpServletRequest request) {
+        if (!UserContext.isInternalCall(request)) {
+            return Result.error(401, "未授权");
+        }
+        try {
+            userService.bindPasswordIfAbsent(dto.getUsername(), dto.getPassword());
+            return Result.success();
+        } catch (BusinessException e) {
+            return Result.error(e.getCode(), e.getMessage());
+        }
+    }
+
     @Operation(summary = "获取当前登录用户信息")
     @GetMapping("/info")
     public Result<User> getCurrentUserInfo(HttpServletRequest request) {
@@ -70,27 +84,26 @@ public class UserController {
 
     @Operation(summary = "更新在线状态")
     @PutMapping("/status")
-    public Result<Void> updateStatus(@RequestParam("userId") Long userId, @RequestParam("status") Integer status) {
-        userService.updateStatus(userId, status);
+    public Result<Void> updateStatus(
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam("status") Integer status) {
+        Long actorId = UserContext.resolveActor(request, userId);
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        userService.updateStatus(actorId, status);
         return Result.success();
     }
 
-    @Operation(summary = "更新个人资料", description = "支持修改昵称、头像、签名、性别、生日、地区、电话、邮箱。内部服务间调用可通过userId参数指定用户")
     @PutMapping("/profile")
     public Result<User> updateProfile(
             @RequestBody UpdateProfileDTO dto,
             @RequestParam(value = "userId", required = false) Long requestUserId,
             HttpServletRequest request) {
-        Long userId;
-        if (requestUserId != null) {
-            // 内部服务间调用：通过参数传递 userId
-            userId = requestUserId;
-        } else {
-            // 外部客户端调用：从 Token 中解析
-            userId = UserContext.getCurrentUserId(request);
-            if (userId == null) {
-                return Result.error(401, "未认证或Token无效");
-            }
+        Long userId = UserContext.resolveActor(request, requestUserId);
+        if (userId == null) {
+            return Result.error(401, "未认证或Token无效");
         }
         try {
             User updatedUser = userService.updateProfile(userId, dto);

@@ -62,6 +62,7 @@ public class MessageService {
         }
 
         if (groupId != null) {
+            groupService.requireMember(groupId, fromId);
             log.info("发送群聊消息: fromId={}, groupId={}", fromId, groupId);
         } else if (toId != null) {
             if (!userService.existsById(toId)) {
@@ -141,6 +142,7 @@ public class MessageService {
      * 获取群聊历史消息（WebSocket用，返回Map列表）
      */
     public List<Map<String, Object>> getGroupHistoryMessages(Long groupId, Long userId, int page, int size) {
+        groupService.requireMember(groupId, userId);
         Page<Message> result = getGroupMessages(groupId, page, size);
         List<Map<String, Object>> messages = new ArrayList<>();
         for (Message msg : result.getRecords()) {
@@ -178,16 +180,16 @@ public class MessageService {
     }
 
     @Transactional
-    public void markAsRead(List<Long> messageIds, Long userId) {
+    public List<Map<String, Object>> markAsRead(List<Long> messageIds, Long userId) {
+        List<Map<String, Object>> notices = new ArrayList<>();
         if (messageIds == null || messageIds.isEmpty() || userId == null) {
-            return;
+            return notices;
         }
 
         LocalDateTime now = LocalDateTime.now();
         List<MessageRead> readRecords = new ArrayList<>();
 
         for (Long idOrMid : messageIds) {
-            // 先尝试通过 mid 查找消息（客户端发送的是雪花算法生成的 mid）
             Message targetMsg = null;
             LambdaQueryWrapper<Message> midQuery = new LambdaQueryWrapper<>();
             midQuery.eq(Message::getMid, idOrMid);
@@ -196,7 +198,6 @@ public class MessageService {
                 targetMsg = byMid.get(0);
             }
 
-            // 如果通过 mid 没找到，回退到按服务端 id 查找（兼容旧逻辑）
             if (targetMsg == null) {
                 targetMsg = messageMapper.selectById(idOrMid);
             }
@@ -205,16 +206,27 @@ public class MessageService {
                 log.warn("标记已读时未找到消息: idOrMid={}, userId={}", idOrMid, userId);
                 continue;
             }
+            if (userId.equals(targetMsg.getFromId())) {
+                continue;
+            }
 
-            // 使用服务端真实 ID 更新状态（仅更新 msgStatus 字段，不影响其他字段）
             Long realMessageId = targetMsg.getId();
-            messageMapper.update(null,
-                new LambdaUpdateWrapper<Message>()
-                    .eq(Message::getId, realMessageId)
-                    .set(Message::getMsgStatus, Constants.MessageStatus.READ)
-            );
+            if (targetMsg.getGroupId() != null) {
+                if (!groupService.isMember(targetMsg.getGroupId(), userId)) {
+                    log.warn("非群成员尝试标记已读: userId={}, groupId={}", userId, targetMsg.getGroupId());
+                    continue;
+                }
+            } else if (!userId.equals(targetMsg.getToId())) {
+                log.warn("非接收方尝试标记私聊已读: userId={}, messageId={}", userId, realMessageId);
+                continue;
+            } else {
+                messageMapper.update(null,
+                    new LambdaUpdateWrapper<Message>()
+                        .eq(Message::getId, realMessageId)
+                        .set(Message::getMsgStatus, Constants.MessageStatus.READ)
+                );
+            }
 
-            // 已读回执使用 mid 作为关联键（与客户端一致）
             Long msgMid = targetMsg.getMid();
             LambdaQueryWrapper<MessageRead> existCheck = new LambdaQueryWrapper<>();
             existCheck.eq(MessageRead::getMid, msgMid)
@@ -225,8 +237,15 @@ public class MessageService {
                 MessageRead readRecord = new MessageRead();
                 readRecord.setMid(msgMid);
                 readRecord.setUserId(userId);
+                readRecord.setGroupId(targetMsg.getGroupId());
                 readRecord.setReadTime(now);
                 readRecords.add(readRecord);
+
+                Map<String, Object> notice = new HashMap<>();
+                notice.put("mid", msgMid);
+                notice.put("fromId", targetMsg.getFromId());
+                notice.put("groupId", targetMsg.getGroupId());
+                notices.add(notice);
             }
         }
 
@@ -237,6 +256,7 @@ public class MessageService {
             log.info("标记消息已读: userId={}, 消息数={}, 回执数={}",
                     userId, messageIds.size(), readRecords.size());
         }
+        return notices;
     }
 
     /**
@@ -286,11 +306,24 @@ public class MessageService {
     }
 
     public Long getUnreadCount(Long userId) {
-        // 直接查询发给该用户且未读的消息数量（不依赖会话表）
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Message::getToId, userId);
         wrapper.eq(Message::getMsgStatus, Constants.MessageStatus.UNREAD);
-        return messageMapper.selectCount(wrapper);
+        long privateUnread = messageMapper.selectCount(wrapper);
+
+        LambdaQueryWrapper<GroupMember> memberWrapper = new LambdaQueryWrapper<>();
+        memberWrapper.eq(GroupMember::getUserId, userId);
+        List<GroupMember> memberships = groupMemberMapper.selectList(memberWrapper);
+        long groupUnread = 0;
+        for (GroupMember membership : memberships) {
+            LambdaQueryWrapper<Message> groupWrapper = new LambdaQueryWrapper<>();
+            groupWrapper.eq(Message::getGroupId, membership.getGroupId())
+                    .ne(Message::getFromId, userId)
+                    .and(w -> w.isNull(Message::getMsgStatus).or().ne(Message::getMsgStatus, -2))
+                    .notExists("SELECT 1 FROM im_message_read r WHERE r.mid = im_message.mid AND r.user_id = " + userId);
+            groupUnread += messageMapper.selectCount(groupWrapper);
+        }
+        return privateUnread + groupUnread;
     }
 
     /**
@@ -549,6 +582,7 @@ public class MessageService {
 
         msgData.put("msgType", msg.getMsgType());
         msgData.put("msgStatus", msg.getMsgStatus());
+        msgData.put("status", toClientStatus(msg));
         msgData.put("delivered", msg.getDelivered() != null ? msg.getDelivered() : 0);
 
         if (msg.getCreateTime() != null) {
@@ -578,6 +612,23 @@ public class MessageService {
         }
 
         return msgData;
+    }
+
+    /**
+     * 转成 SDK 的 MessageStatus：0 发送中，1 已发送，2 已送达，3 已读，-2 已撤回。
+     * 下行给接收方的消息至少是已送达，避免客户端把缺省 0 显示成发送中。
+     */
+    private int toClientStatus(Message msg) {
+        if (msg.getMsgStatus() != null && msg.getMsgStatus() == -2) {
+            return -2;
+        }
+        if (msg.getMsgStatus() != null && msg.getMsgStatus() == Constants.MessageStatus.READ) {
+            return 3;
+        }
+        if (msg.getDelivered() != null && msg.getDelivered() == 1) {
+            return 2;
+        }
+        return 1;
     }
 
     /**

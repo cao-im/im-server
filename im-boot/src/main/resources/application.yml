@@ -82,7 +82,13 @@ api-log:
 
 # 日志级别配置 (开发环境Debug模式)
 logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
   level:
     com.caoim.imcore.config.ApiLogFilter: DEBUG
     org.springframework.web.filter: DEBUG
     com.caoim.imserver: DEBUG
+
+im:
+  internal-token: caoim-dev-internal-token

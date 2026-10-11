@@ -1,6 +1,8 @@
 package com.caoim.imcore.entity;
 
+import com.alibaba.fastjson2.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -12,6 +14,9 @@ public class User {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String username;
+    @JsonIgnore
+    @JSONField(serialize = false)
+    private String password;
     private String nickname;
     private String avatar;
     private String signature;

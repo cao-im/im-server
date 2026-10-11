@@ -29,55 +29,81 @@ public class ContactController {
 
     @Operation(summary = "获取联系人列表")
     @GetMapping("/list")
-    public Result<List<ContactDTO>> getContacts(@RequestParam("userId") String userId) {
-        return Result.success(contactService.getContacts(Long.parseLong(userId)));
+    public Result<List<ContactDTO>> getContacts(
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId) {
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        return Result.success(contactService.getContacts(actorId));
     }
 
-    @Operation(summary = "删除联系人（删除好友）")
     @DeleteMapping("/{contactId}")
     public Result<Void> deleteContact(
-            @RequestParam("userId") String userId,
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId,
             @PathVariable String contactId) {
-        contactService.deleteContact(Long.parseLong(userId), Long.parseLong(contactId));
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        contactService.deleteContact(actorId, Long.parseLong(contactId));
         return Result.success();
     }
 
-    @Operation(summary = "修改备注名")
     @PutMapping("/remark")
     public Result<Void> updateRemark(
-            @RequestParam("userId") String userId,
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId,
             @RequestParam("contactId") String contactId,
             @RequestParam("remark") String remark) {
-        contactService.updateRemark(Long.parseLong(userId), Long.parseLong(contactId), remark);
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        contactService.updateRemark(actorId, Long.parseLong(contactId), remark);
         return Result.success();
     }
 
-    @Operation(summary = "设置置顶")
     @PutMapping("/top")
     public Result<Void> setTop(
-            @RequestParam("userId") String userId,
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId,
             @RequestParam("contactId") String contactId,
             @RequestParam("isTop") boolean isTop) {
-        contactService.setTop(Long.parseLong(userId), Long.parseLong(contactId), isTop);
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        contactService.setTop(actorId, Long.parseLong(contactId), isTop);
         return Result.success();
     }
 
-    @Operation(summary = "设置免打扰")
     @PutMapping("/mute")
     public Result<Void> setMute(
-            @RequestParam("userId") String userId,
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId,
             @RequestParam("contactId") String contactId,
             @RequestParam("isMute") boolean isMute) {
-        contactService.setMute(Long.parseLong(userId), Long.parseLong(contactId), isMute);
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        contactService.setMute(actorId, Long.parseLong(contactId), isMute);
         return Result.success();
     }
 
-    @Operation(summary = "检查好友关系状态")
     @GetMapping("/check-status")
     public Result<Integer> checkFriendStatus(
-            @RequestParam("userId") String userId,
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId,
             @RequestParam("targetUserId") String targetUserId) {
-        int status = friendRequestService.checkRequestStatus(Long.parseLong(userId), Long.parseLong(targetUserId));
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        int status = friendRequestService.checkRequestStatus(actorId, Long.parseLong(targetUserId));
         return Result.success(status);
     }
 

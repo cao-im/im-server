@@ -72,22 +72,38 @@ public interface ImFeignClient {
 
     // ==================== 群组接口 ====================
 
+    @PostMapping("/user/bind-password")
+    Result<Void> bindPassword(@RequestBody LoginDTO dto);
+
+    @GetMapping("/group/{groupId}")
+    Result<Group> getGroupInfo(@PathVariable("groupId") Long groupId);
+
     @PostMapping("/group/create")
-    Result<Group> createGroup(@RequestBody GroupCreateDTO dto);
+    Result<Group> createGroup(@RequestParam("ownerId") Long ownerId, @RequestBody GroupCreateDTO dto);
 
     @GetMapping("/group/list")
     Result<List<Group>> getUserGroups(@RequestParam("userId") Long userId);
 
-    // ==================== 好友接口 ====================
+    @PostMapping("/group/{groupId}/member")
+    Result<Void> addGroupMember(
+            @PathVariable("groupId") Long groupId,
+            @RequestParam("userId") Long userId,
+            @RequestParam("operatorId") Long operatorId);
 
-    @PostMapping("/friend/request")
-    Result<Void> sendFriendRequest(@RequestParam("userId") Long userId, @RequestParam("friendId") Long friendId);
+    @DeleteMapping("/group/{groupId}/member/{userId}")
+    Result<Void> removeGroupMember(
+            @PathVariable("groupId") Long groupId,
+            @PathVariable("userId") Long userId,
+            @RequestParam("operatorId") Long operatorId);
 
-    @PostMapping("/friend/accept")
-    Result<Void> acceptFriendRequest(@RequestParam("userId") Long userId, @RequestParam("friendId") Long friendId);
+    @PostMapping("/friend-request/request")
+    Result<Void> sendFriendRequest(@RequestParam("fromUserId") Long userId, @RequestParam("toUserId") Long friendId);
 
-    @PostMapping("/friend/reject")
-    Result<Void> rejectFriendRequest(@RequestParam("userId") Long userId, @RequestParam("friendId") Long friendId);
+    @PutMapping("/friend-request/accept")
+    Result<Void> acceptFriendRequest(@RequestParam("toUserId") Long userId, @RequestParam("fromUserId") Long friendId);
+
+    @PutMapping("/friend-request/reject")
+    Result<Void> rejectFriendRequest(@RequestParam("toUserId") Long userId, @RequestParam("fromUserId") Long friendId);
 
     @GetMapping("/contact/list")
     Result<List<ContactDTO>> getContacts(@RequestParam("userId") Long userId);

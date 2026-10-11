@@ -150,12 +150,73 @@ public class GroupService {
     }
 
     private void checkIsMember(Long groupId, Long userId) {
+        if (!isMember(groupId, userId)) {
+            throw new BusinessException(ErrorCode.NOT_GROUP_MEMBER);
+        }
+    }
+
+    public boolean isMember(Long groupId, Long userId) {
+        if (groupId == null || userId == null) {
+            return false;
+        }
         LambdaQueryWrapper<GroupMember> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(GroupMember::getGroupId, groupId);
         wrapper.eq(GroupMember::getUserId, userId);
-        if (groupMemberMapper.selectCount(wrapper) == 0) {
-            throw new BusinessException(ErrorCode.NOT_GROUP_MEMBER);
+        return groupMemberMapper.selectCount(wrapper) > 0;
+    }
+
+    public void requireMember(Long groupId, Long userId) {
+        checkIsMember(groupId, userId);
+    }
+
+    public List<Long> listMemberIds(Long groupId) {
+        return getGroupMembers(groupId).stream().map(GroupMember::getUserId).toList();
+    }
+
+    @Transactional
+    public void dismissGroup(Long groupId, Long operatorId) {
+        Group group = getGroupInfo(groupId);
+        if (!operatorId.equals(group.getOwnerId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), "只有群主才能解散群组");
         }
+        LambdaQueryWrapper<GroupMember> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(GroupMember::getGroupId, groupId);
+        groupMemberMapper.delete(wrapper);
+        groupMapper.deleteById(groupId);
+    }
+
+    @Transactional
+    public void transferOwner(Long groupId, Long operatorId, Long newOwnerId) {
+        Group group = getGroupInfo(groupId);
+        if (!operatorId.equals(group.getOwnerId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), "只有群主才能转让群主");
+        }
+        if (operatorId.equals(newOwnerId)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "该用户已是群主");
+        }
+        checkIsMember(groupId, newOwnerId);
+
+        LambdaQueryWrapper<GroupMember> ownerQuery = new LambdaQueryWrapper<>();
+        ownerQuery.eq(GroupMember::getGroupId, groupId).eq(GroupMember::getUserId, operatorId);
+        GroupMember ownerMember = groupMemberMapper.selectOne(ownerQuery);
+        if (ownerMember != null) {
+            ownerMember.setRole(Constants.GroupRole.MEMBER);
+            groupMemberMapper.updateById(ownerMember);
+        }
+
+        LambdaQueryWrapper<GroupMember> newOwnerQuery = new LambdaQueryWrapper<>();
+        newOwnerQuery.eq(GroupMember::getGroupId, groupId).eq(GroupMember::getUserId, newOwnerId);
+        GroupMember newOwner = groupMemberMapper.selectOne(newOwnerQuery);
+        newOwner.setRole(Constants.GroupRole.OWNER);
+        groupMemberMapper.updateById(newOwner);
+
+        group.setOwnerId(newOwnerId);
+        groupMapper.updateById(group);
+    }
+
+    public void updateGroupInfo(Long groupId, String name, String avatar, Long operatorId) {
+        checkIsOwnerOrAdmin(groupId, operatorId);
+        updateGroupInfo(groupId, name, avatar);
     }
 
     private void checkIsOwnerOrAdmin(Long groupId, Long userId) {

@@ -47,6 +47,7 @@ USE cao_im_db;
 CREATE TABLE IF NOT EXISTS im_user (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID(自增)',
     username VARCHAR(50) NOT NULL UNIQUE COMMENT 'IM用户名',
+    password VARCHAR(100) DEFAULT NULL COMMENT 'BCrypt密码，存的是客户端传来的口令',
     nickname VARCHAR(50) DEFAULT '' COMMENT '昵称',
     avatar VARCHAR(255) DEFAULT '' COMMENT '头像URL',
     signature VARCHAR(200) DEFAULT '' COMMENT '个性签名',

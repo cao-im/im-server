@@ -7,10 +7,11 @@ import com.caoim.imcore.dto.MessageSendDTO;
 import com.caoim.imcore.dto.OfflineMessageResponseDTO;
 import com.caoim.imcore.entity.Message;
 import com.caoim.imcore.service.MessageService;
+import com.caoim.imcore.service.GroupService;
 import com.caoim.imserver.common.UserContext;
+import com.caoim.imserver.websocket.IMWebSocketHandler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,11 +24,18 @@ import java.util.Map;
 @Tag(name = "消息管理")
 @RestController
 @RequestMapping("/message")
-@RequiredArgsConstructor
 @Slf4j
 public class MessageController {
 
     private final MessageService messageService;
+    private final GroupService groupService;
+    private final IMWebSocketHandler webSocketHandler;
+
+    public MessageController(MessageService messageService, GroupService groupService, IMWebSocketHandler webSocketHandler) {
+        this.messageService = messageService;
+        this.groupService = groupService;
+        this.webSocketHandler = webSocketHandler;
+    }
 
     @Operation(summary = "发送消息")
     @PostMapping("/send")
@@ -75,10 +83,12 @@ public class MessageController {
         
         // 群聊消息也需要认证（后续可检查用户是否在群中）
         Long userId = UserContext.getCurrentUserId(request);
-        if (userId == null) {
-            return Result.error(401, "未认证或Token无效");
+        if (!UserContext.isInternalCall(request)) {
+            if (userId == null) {
+                return Result.error(401, "未认证或Token无效");
+            }
+            groupService.requireMember(groupId, userId);
         }
-        
         return Result.success(messageService.getGroupMessages(groupId, page, size));
     }
 
@@ -98,7 +108,7 @@ public class MessageController {
         log.info("收到已读回执: userId={}, 消息数={}", userId, messageIds.size());
         
         // 调用完整的markAsRead方法（包含回执记录）
-        messageService.markAsRead(messageIds, userId);
+        webSocketHandler.pushReadReceipts(userId, messageService.markAsRead(messageIds, userId));
         
         return Result.success();
     }
@@ -182,7 +192,12 @@ public class MessageController {
 
     @Operation(summary = "获取群组消息最大seq（用于离线增量同步基准）")
     @GetMapping("/max-seq")
-    public Result<Map<String, Object>> getMaxSeq(@RequestParam Long groupId) {
+    public Result<Map<String, Object>> getMaxSeq(HttpServletRequest request, @RequestParam Long groupId) {
+        Long userId = UserContext.getCurrentUserId(request);
+        if (userId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        groupService.requireMember(groupId, userId);
         Long maxSeq = messageService.getMaxSeq(groupId);
         Map<String, Object> result = new HashMap<>();
         result.put("groupId", groupId);

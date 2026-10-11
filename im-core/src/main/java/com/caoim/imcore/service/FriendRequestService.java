@@ -122,6 +122,7 @@ public class FriendRequestService {
                         .or()
                         .eq(FriendRequest::getFromUserId, userId)
         );
+        wrapper.notIn(FriendRequest::getStatus, Constants.FriendStatus.REJECTED, Constants.FriendStatus.DELETED);
         wrapper.orderByDesc(FriendRequest::getCreateTime);
         List<FriendRequest> requests = friendRequestMapper.selectList(wrapper);
 
@@ -149,9 +150,7 @@ public class FriendRequestService {
                 return 2;
             }
             if (request.getStatus() == Constants.FriendStatus.PENDING) {
-                if (request.getFromUserId().equals(userId)) {
-                    return 1;
-                }
+                return 1;
             }
         }
 

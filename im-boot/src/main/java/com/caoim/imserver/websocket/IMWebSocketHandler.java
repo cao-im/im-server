@@ -3,7 +3,10 @@ package com.caoim.imserver.websocket;
 import com.alibaba.fastjson2.JSON;
 import com.caoim.imcore.common.BusinessException;
 import com.caoim.imcore.common.Constants;
+import com.caoim.imcore.dto.GroupCreateDTO;
+import com.caoim.imcore.entity.Group;
 import com.caoim.imcore.entity.Message;
+import com.caoim.imcore.service.GroupService;
 import com.caoim.imcore.service.MessageService;
 import com.caoim.imcore.service.UserService;
 import com.caoim.imcore.util.JwtUtil;
@@ -14,6 +17,7 @@ import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -29,14 +33,16 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     private final MessageService messageService;
     private final UserService userService;
+    private final GroupService groupService;
     private final JwtUtil jwtUtil;
 
-    private static final Map<Long, WebSocketSession> USER_SESSIONS = new ConcurrentHashMap<>();
+    private static final Map<Long, Set<WebSocketSession>> USER_SESSIONS = new ConcurrentHashMap<>();
     private static final Map<WebSocketSession, Long> SESSION_USERS = new ConcurrentHashMap<>();
 
-    public IMWebSocketHandler(MessageService messageService, UserService userService, JwtUtil jwtUtil) {
+    public IMWebSocketHandler(MessageService messageService, UserService userService, GroupService groupService, JwtUtil jwtUtil) {
         this.messageService = messageService;
         this.userService = userService;
+        this.groupService = groupService;
         this.jwtUtil = jwtUtil;
     }
 
@@ -87,7 +93,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         }
 
         Long userId = jwtUtil.getUserIdFromToken(token);
-        USER_SESSIONS.put(userId, session);
+        USER_SESSIONS.computeIfAbsent(userId, id -> ConcurrentHashMap.newKeySet()).add(session);
         SESSION_USERS.put(session, userId);
         userService.updateStatus(userId, Constants.UserStatus.ONLINE);
 
@@ -104,10 +110,35 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             String type = (String) msgMap.get("type");
             switch (type) {
                 case "private":
-                    handlePrivateMessage(userId, msgMap);
+                    handlePrivateMessage(userId, session, msgMap);
                     break;
                 case "group":
-                    handleGroupMessage(userId, msgMap);
+                    handleGroupMessage(userId, session, msgMap);
+                    break;
+                case "group_info":
+                    handleGroupInfo(userId, session, msgMap);
+                    break;
+                case "group_create":
+                    handleGroupCreate(userId, session, msgMap);
+                    break;
+                case "group_list":
+                    handleGroupList(userId, session, msgMap);
+                    break;
+                case "group_dismiss":
+                    handleGroupDismiss(userId, session, msgMap);
+                    break;
+                case "group_add_members":
+                    handleGroupAddMembers(userId, session, msgMap);
+                    break;
+                case "group_remove_member":
+                    handleGroupRemoveMember(userId, session, msgMap);
+                    break;
+                case "group_transfer_owner":
+                    handleGroupTransferOwner(userId, session, msgMap);
+                    break;
+                case "group_update":
+                case "group_update_info":
+                    handleGroupUpdate(userId, session, msgMap);
                     break;
                 case "group_get":
                     handleGetGroupHistoryMessages(userId, session, msgMap);
@@ -142,7 +173,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void handlePrivateMessage(Long fromId, Map<String, Object> msgMap) {
+    private void handlePrivateMessage(Long fromId, WebSocketSession session, Map<String, Object> msgMap) {
         try {
             Long toId = Long.valueOf(msgMap.get("toId").toString());
             String content = (String) msgMap.get("content");
@@ -168,20 +199,14 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             
         } catch (BusinessException e) {
             log.error("私聊消息发送失败: {}", e.getMessage());
-            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
-            if (fromSession != null && fromSession.isOpen()) {
-                sendError(fromSession, e.getMessage());
-            }
+            sendError(session, e.getMessage());
         } catch (Exception e) {
             log.error("处理私聊消息异常: ", e);
-            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
-            if (fromSession != null && fromSession.isOpen()) {
-                sendError(fromSession, "消息发送失败: " + e.getMessage());
-            }
+            sendError(session, "消息发送失败: " + e.getMessage());
         }
     }
 
-    private void handleGroupMessage(Long fromId, Map<String, Object> msgMap) {
+    private void handleGroupMessage(Long fromId, WebSocketSession session, Map<String, Object> msgMap) {
         try {
             // 优先取 groupId，兼容旧版客户端可能将群ID放在 toId 中的情况
             Object groupIdObj = msgMap.get("groupId");
@@ -210,16 +235,10 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
         } catch (BusinessException e) {
             log.error("群聊消息发送失败: {}", e.getMessage());
-            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
-            if (fromSession != null && fromSession.isOpen()) {
-                sendError(fromSession, e.getMessage());
-            }
+            sendError(session, e.getMessage());
         } catch (Exception e) {
             log.error("处理群聊消息异常: ", e);
-            WebSocketSession fromSession = USER_SESSIONS.get(fromId);
-            if (fromSession != null && fromSession.isOpen()) {
-                sendError(fromSession, "消息发送失败: " + e.getMessage());
-            }
+            sendError(session, "消息发送失败: " + e.getMessage());
         }
     }
 
@@ -243,6 +262,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
             Long groupId = Long.valueOf(groupIdObj.toString());
+            groupService.requireMember(groupId, userId);
             int page = msgMap.get("page") != null ? Integer.valueOf(msgMap.get("page").toString()) : 1;
             int size = msgMap.get("size") != null ? Integer.valueOf(msgMap.get("size").toString()) : 20;
 
@@ -392,6 +412,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             }
 
             Long groupId = Long.valueOf(groupIdObj.toString());
+            groupService.requireMember(groupId, userId);
 
             // 使用服务端 seq 做增量查询
             Long sinceSeq = 0L;
@@ -496,7 +517,8 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
             // 调用完整的markAsRead方法（包含回执记录）
             // 注意：这里传入的可能是 mid 也可能是服务端 id，由 markAsRead 统一处理
-            messageService.markAsRead(messageIds, userId);
+            List<Map<String, Object>> notices = messageService.markAsRead(messageIds, userId);
+            pushReadReceipts(userId, notices);
 
             // 发送确认响应给客户端
             Map<String, Object> response = new HashMap<>();
@@ -633,20 +655,17 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             recallNotification.put("timestamp", System.currentTimeMillis());
 
             if (recalledMessage.getGroupId() != null) {
-                // 群聊消息：通知群成员
                 recallNotification.put("groupId", recalledMessage.getGroupId());
                 String notificationJson = JSON.toJSONString(recallNotification);
-
-                for (Map.Entry<Long, WebSocketSession> entry : USER_SESSIONS.entrySet()) {
-                    if (!entry.getKey().equals(userId)) {
-                        pushMessageToUser(entry.getKey(), notificationJson);
-                    }
+                for (Long memberId : groupService.listMemberIds(recalledMessage.getGroupId())) {
+                    pushMessageToUser(memberId, notificationJson);
                 }
                 log.info("群聊消息撤回通知已发送: groupId={}, messageId={}", recalledMessage.getGroupId(), messageId);
             } else if (recalledMessage.getToId() != null) {
-                // 私聊消息：通知接收方
                 recallNotification.put("toId", recalledMessage.getToId());
-                pushMessageToUser(recalledMessage.getToId(), JSON.toJSONString(recallNotification));
+                String notificationJson = JSON.toJSONString(recallNotification);
+                pushMessageToUser(recalledMessage.getToId(), notificationJson);
+                pushMessageToUser(recalledMessage.getFromId(), notificationJson);
                 log.info("私聊消息撤回通知已发送: toId={}, messageId={}", recalledMessage.getToId(), messageId);
             }
 
@@ -668,10 +687,16 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         Long userId = SESSION_USERS.remove(session);
         if (userId != null) {
-            USER_SESSIONS.remove(userId);
-            userService.updateStatus(userId, Constants.UserStatus.OFFLINE);
-
-            log.info("用户 {} 断开连接, 原因: {}, 当前在线人数: {}", userId, status, USER_SESSIONS.size());
+            Set<WebSocketSession> sessions = USER_SESSIONS.get(userId);
+            if (sessions != null) {
+                sessions.remove(session);
+                sessions.removeIf(item -> !item.isOpen());
+                if (sessions.isEmpty()) {
+                    USER_SESSIONS.remove(userId, sessions);
+                    userService.updateStatus(userId, Constants.UserStatus.OFFLINE);
+                }
+            }
+            log.info("用户 {} 断开一条连接, 原因: {}, 当前在线人数: {}", userId, status, USER_SESSIONS.size());
         } else {
             log.debug("未知会话断开: sessionId={}, 原因: {}", session.getId(), status);
         }
@@ -719,20 +744,22 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     }
 
     public void pushMessageToUser(Long userId, String message) {
-        WebSocketSession session = USER_SESSIONS.get(userId);
-
-        log.debug("尝试推送消息给用户 {}: 在线={}, session={}",
-                userId,
-                session != null && session.isOpen(),
-                session != null ? session.getId() : "null");
-
-        if (session != null && session.isOpen()) {
-            sendToUser(session, message);
-            log.info("✅ 消息已成功推送给用户 {}", userId);
+        Set<WebSocketSession> sessions = USER_SESSIONS.get(userId);
+        if (sessions == null || sessions.isEmpty()) {
+            log.warn("用户 {} 不在线，消息无法实时推送 (当前在线用户数: {})", userId, USER_SESSIONS.size());
+            return;
+        }
+        int sent = 0;
+        for (WebSocketSession session : sessions) {
+            if (session != null && session.isOpen()) {
+                sendToUser(session, message);
+                sent++;
+            }
+        }
+        if (sent == 0) {
+            log.warn("用户 {} 的连接都已关闭，消息无法实时推送", userId);
         } else {
-            log.warn("⚠️ 用户 {} 不在线或连接已断开，消息无法实时推送 (当前在线用户数: {})",
-                    userId, USER_SESSIONS.size());
-            log.warn("当前在线用户列表: {}", USER_SESSIONS.keySet());
+            log.info("消息已推送给用户 {} 的 {} 个在线端", userId, sent);
         }
     }
 
@@ -818,9 +845,9 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
         log.info("📡 [WS推送-群聊] fromId={}, groupId={}, 推送数据={}", fromId, groupId, message);
 
-        for (Map.Entry<Long, WebSocketSession> entry : USER_SESSIONS.entrySet()) {
-            if (!entry.getKey().equals(fromId)) {
-                pushMessageToUser(entry.getKey(), message);
+        for (Long memberId : groupService.listMemberIds(groupId)) {
+            if (!memberId.equals(fromId)) {
+                pushMessageToUser(memberId, message);
             }
         }
         
@@ -873,8 +900,11 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     }
 
     public boolean isUserOnline(Long userId) {
-        WebSocketSession session = USER_SESSIONS.get(userId);
-        return session != null && session.isOpen();
+        Set<WebSocketSession> sessions = USER_SESSIONS.get(userId);
+        if (sessions == null) {
+            return false;
+        }
+        return sessions.stream().anyMatch(WebSocketSession::isOpen);
     }
 
     public int getOnlineCount() {
@@ -887,5 +917,186 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     public Set<Long> getOnlineUserIds() {
         return USER_SESSIONS.keySet();
+    }
+
+    public void pushReadReceipts(Long readerId, List<Map<String, Object>> notices) {
+        if (notices == null || notices.isEmpty()) {
+            return;
+        }
+        Map<Long, List<Long>> bySender = new HashMap<>();
+        for (Map<String, Object> notice : notices) {
+            Object fromIdObj = notice.get("fromId");
+            Object midObj = notice.get("mid");
+            if (!(fromIdObj instanceof Long) || !(midObj instanceof Long)) {
+                continue;
+            }
+            Long fromId = (Long) fromIdObj;
+            if (fromId.equals(readerId)) {
+                continue;
+            }
+            bySender.computeIfAbsent(fromId, key -> new ArrayList<>()).add((Long) midObj);
+        }
+        for (Map.Entry<Long, List<Long>> entry : bySender.entrySet()) {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "read_receipt");
+            payload.put("messageIds", entry.getValue());
+            payload.put("readerId", readerId);
+            pushMessageToUser(entry.getKey(), JSON.toJSONString(payload));
+        }
+    }
+
+    private void handleGroupInfo(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Long groupId = longValue(msgMap.get("groupId"));
+            groupService.requireMember(groupId, userId);
+            replyGroup(session, "group_info", true, "ok", groupService.getGroupInfo(groupId));
+        } catch (Exception e) {
+            replyGroup(session, "group_info", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupCreate(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            String name = msgMap.get("name") == null ? "" : msgMap.get("name").toString().trim();
+            if (name.isEmpty()) {
+                replyGroup(session, "group_create", false, "群组名称不能为空", null);
+                return;
+            }
+            GroupCreateDTO dto = new GroupCreateDTO();
+            dto.setName(name);
+            if (msgMap.get("avatar") != null) {
+                dto.setAvatar(msgMap.get("avatar").toString());
+            }
+            dto.setMemberIds(longList(msgMap.get("memberIds")));
+            Group group = groupService.createGroup(userId, dto);
+            replyGroup(session, "group_create", true, "ok", group);
+        } catch (Exception e) {
+            replyGroup(session, "group_create", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupList(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            List<Map<String, Object>> data = new ArrayList<>();
+            for (Group group : groupService.getUserGroups(userId)) {
+                data.add(groupToClientMap(group));
+            }
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "group_list");
+            response.put("success", true);
+            response.put("message", "ok");
+            response.put("memberIds", List.of());
+            response.put("data", data);
+            sendToUser(session, JSON.toJSONString(response));
+        } catch (Exception e) {
+            replyGroup(session, "group_list", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupDismiss(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Long groupId = longValue(msgMap.get("groupId"));
+            groupService.dismissGroup(groupId, userId);
+            replyGroup(session, "group_dismiss", true, "ok", null);
+        } catch (Exception e) {
+            replyGroup(session, "group_dismiss", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupAddMembers(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Long groupId = longValue(msgMap.get("groupId"));
+            groupService.requireMember(groupId, userId);
+            for (Long memberId : longList(msgMap.get("userIds"))) {
+                if (!groupService.isMember(groupId, memberId)) {
+                    groupService.addMember(groupId, memberId, userId);
+                }
+            }
+            replyGroup(session, "group_add_members", true, "ok", groupService.getGroupInfo(groupId));
+        } catch (Exception e) {
+            replyGroup(session, "group_add_members", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupRemoveMember(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Long groupId = longValue(msgMap.get("groupId"));
+            Long memberId = longValue(msgMap.get("userId"));
+            groupService.removeMember(groupId, memberId, userId);
+            replyGroup(session, "group_remove_member", true, "ok", null);
+        } catch (Exception e) {
+            replyGroup(session, "group_remove_member", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupTransferOwner(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Long groupId = longValue(msgMap.get("groupId"));
+            Long newOwnerId = longValue(msgMap.get("newOwnerId"));
+            groupService.transferOwner(groupId, userId, newOwnerId);
+            replyGroup(session, "group_transfer_owner", true, "ok", groupService.getGroupInfo(groupId));
+        } catch (Exception e) {
+            replyGroup(session, "group_transfer_owner", false, e.getMessage(), null);
+        }
+    }
+
+    private void handleGroupUpdate(Long userId, WebSocketSession session, Map<String, Object> msgMap) {
+        try {
+            Long groupId = longValue(msgMap.get("groupId"));
+            String name = msgMap.get("name") == null ? null : msgMap.get("name").toString();
+            String avatar = msgMap.get("avatar") == null ? null : msgMap.get("avatar").toString();
+            groupService.updateGroupInfo(groupId, name, avatar, userId);
+            replyGroup(session, "group_update_info", true, "ok", groupService.getGroupInfo(groupId));
+        } catch (Exception e) {
+            replyGroup(session, "group_update_info", false, e.getMessage(), null);
+        }
+    }
+
+    private void replyGroup(WebSocketSession session, String type, boolean success, String message, Group group) {
+        Map<String, Object> data = group == null ? null : groupToClientMap(group);
+        Map<String, Object> response = new HashMap<>();
+        response.put("type", type);
+        response.put("success", success);
+        response.put("message", message == null ? "" : message);
+        response.put("memberIds", data == null ? List.of() : data.get("memberIds"));
+        if (data != null) {
+            response.put("name", data.get("name"));
+            response.put("data", data);
+        }
+        sendToUser(session, JSON.toJSONString(response));
+    }
+
+    private Map<String, Object> groupToClientMap(Group group) {
+        List<Long> memberIds = groupService.listMemberIds(group.getId());
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", group.getId());
+        data.put("name", group.getName() == null ? "" : group.getName());
+        data.put("avatar", group.getAvatar());
+        data.put("ownerId", group.getOwnerId());
+        data.put("memberCount", memberIds.size());
+        data.put("memberIds", memberIds);
+        if (group.getCreateTime() != null) {
+            data.put("createTime", group.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        }
+        return data;
+    }
+
+    private Long longValue(Object value) {
+        if (value == null) {
+            throw new BusinessException("缺少必要参数");
+        }
+        return Long.valueOf(value.toString());
+    }
+
+    private List<Long> longList(Object value) {
+        List<Long> result = new ArrayList<>();
+        if (value instanceof List<?> list) {
+            for (Object item : list) {
+                if (item != null) {
+                    result.add(Long.valueOf(item.toString()));
+                }
+            }
+        }
+        return result;
     }
 }

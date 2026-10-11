@@ -3,8 +3,10 @@ package com.caoim.imserver.controller;
 import com.caoim.imcore.common.Result;
 import com.caoim.imcore.dto.FriendRequestDTO;
 import com.caoim.imcore.service.FriendRequestService;
+import com.caoim.imserver.common.UserContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,33 +23,51 @@ public class FriendRequestController {
     @Operation(summary = "发送好友请求")
     @PostMapping("/request")
     public Result<Void> sendFriendRequest(
-            @RequestParam("fromUserId") String fromUserId,
+            HttpServletRequest request,
+            @RequestParam(value = "fromUserId", required = false) String fromUserId,
             @RequestParam("toUserId") String toUserId) {
-        friendRequestService.sendFriendRequest(Long.parseLong(fromUserId), Long.parseLong(toUserId));
+        Long actorId = UserContext.resolveActor(request, fromUserId == null ? null : Long.parseLong(fromUserId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        friendRequestService.sendFriendRequest(actorId, Long.parseLong(toUserId));
         return Result.success();
     }
 
-    @Operation(summary = "接受好友请求")
     @PutMapping("/accept")
     public Result<Void> acceptFriendRequest(
-            @RequestParam("toUserId") String toUserId,
+            HttpServletRequest request,
+            @RequestParam(value = "toUserId", required = false) String toUserId,
             @RequestParam("fromUserId") String fromUserId) {
-        friendRequestService.acceptFriendRequest(Long.parseLong(toUserId), Long.parseLong(fromUserId));
+        Long actorId = UserContext.resolveActor(request, toUserId == null ? null : Long.parseLong(toUserId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        friendRequestService.acceptFriendRequest(actorId, Long.parseLong(fromUserId));
         return Result.success();
     }
 
-    @Operation(summary = "拒绝好友请求")
     @PutMapping("/reject")
     public Result<Void> rejectFriendRequest(
-            @RequestParam("toUserId") String toUserId,
+            HttpServletRequest request,
+            @RequestParam(value = "toUserId", required = false) String toUserId,
             @RequestParam("fromUserId") String fromUserId) {
-        friendRequestService.rejectFriendRequest(Long.parseLong(toUserId), Long.parseLong(fromUserId));
+        Long actorId = UserContext.resolveActor(request, toUserId == null ? null : Long.parseLong(toUserId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        friendRequestService.rejectFriendRequest(actorId, Long.parseLong(fromUserId));
         return Result.success();
     }
 
-    @Operation(summary = "获取待处理的好友请求")
     @GetMapping("/pending")
-    public Result<List<FriendRequestDTO>> getPendingRequests(@RequestParam("userId") String userId) {
-        return Result.success(friendRequestService.getPendingRequests(Long.parseLong(userId)));
+    public Result<List<FriendRequestDTO>> getPendingRequests(
+            HttpServletRequest request,
+            @RequestParam(value = "userId", required = false) String userId) {
+        Long actorId = UserContext.resolveActor(request, userId == null ? null : Long.parseLong(userId));
+        if (actorId == null) {
+            return Result.error(401, "未认证或Token无效");
+        }
+        return Result.success(friendRequestService.getPendingRequests(actorId));
     }
 }

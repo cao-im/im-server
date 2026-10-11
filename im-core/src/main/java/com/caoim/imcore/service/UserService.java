@@ -13,6 +13,8 @@ import com.caoim.imcore.entity.User;
 import com.caoim.imcore.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -27,6 +29,7 @@ public class UserService {
 
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Value("${jwt.expiration}")
     private Long expiration;
@@ -37,9 +40,13 @@ public class UserService {
         if (userMapper.selectCount(wrapper) > 0) {
             throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS);
         }
+        if (dto.getPassword() == null || dto.getPassword().isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "密码不能为空");
+        }
 
         User user = new User();
         user.setUsername(dto.getUsername());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setNickname(dto.getNickname() != null ? dto.getNickname() : dto.getUsername());
         user.setStatus(Constants.UserStatus.OFFLINE);
         userMapper.insert(user);
@@ -62,6 +69,12 @@ public class UserService {
 
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new BusinessException(ErrorCode.PASSWORD_NOT_SET);
+        }
+        if (dto.getPassword() == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_ERROR);
         }
 
         user.setStatus(Constants.UserStatus.ONLINE);
@@ -107,6 +120,24 @@ public class UserService {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
         return user;
+    }
+
+    /**
+     * 仅在密码尚未写入时绑定。已有密码的账号不会被覆盖。
+     */
+    public void bindPasswordIfAbsent(String username, String rawPassword) {
+        if (username == null || username.isBlank() || rawPassword == null || rawPassword.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "用户名和密码不能为空");
+        }
+        User user = findByUsername(username);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (user.getPassword() != null && !user.getPassword().isBlank()) {
+            return;
+        }
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        userMapper.updateById(user);
     }
 
     public User findByUsername(String username) {

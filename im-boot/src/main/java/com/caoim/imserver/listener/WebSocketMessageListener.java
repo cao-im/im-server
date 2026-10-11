@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Slf4j
 @Component
@@ -41,21 +43,21 @@ public class WebSocketMessageListener {
         }
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onFriendRequest(FriendRequestEvent event) {
         log.info("收到好友请求事件: fromId={}, toId={}", event.getFromId(), event.getToId());
 
         webSocketHandler.pushFriendRequest(event.getFromId(), event.getToId());
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onFriendAccepted(FriendAcceptedEvent event) {
         log.info("好友请求已被接受: userId={}, friendId={}", event.getUserId(), event.getFriendId());
 
         webSocketHandler.pushFriendAccepted(event.getUserId(), event.getFriendId());
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onFriendRejected(FriendRejectedEvent event) {
         log.info("好友请求已被拒绝: userId={}, friendId={}", event.getUserId(), event.getFriendId());
 
