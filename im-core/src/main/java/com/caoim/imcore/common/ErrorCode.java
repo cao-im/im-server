@@ -14,6 +14,8 @@ public enum ErrorCode {
     USER_ALREADY_EXISTS(1002, "用户已存在"),
     PASSWORD_ERROR(1003, "密码错误"),
     PASSWORD_NOT_SET(1006, "IM密码未初始化"),
+    USER_DISABLED(1007, "账号已被禁用"),
+    REGISTER_CLOSED(1008, "已关闭注册"),
     TOKEN_EXPIRED(1004, "Token已过期"),
     TOKEN_INVALID(1005, "Token无效"),
 
@@ -25,7 +27,8 @@ public enum ErrorCode {
     NOT_GROUP_MEMBER(3002, "不是群成员"),
     ALREADY_IN_GROUP(3003, "已经在群组中"),
 
-    MESSAGE_SEND_FAILED(4001, "消息发送失败");
+    MESSAGE_SEND_FAILED(4001, "消息发送失败"),
+    SENSITIVE_WORD(4002, "消息包含敏感词");
 
     private final int code;
     private final String message;

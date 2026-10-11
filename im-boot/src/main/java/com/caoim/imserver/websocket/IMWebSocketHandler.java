@@ -93,6 +93,13 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         }
 
         Long userId = jwtUtil.getUserIdFromToken(token);
+        try {
+            userService.assertEnabled(userId);
+        } catch (BusinessException e) {
+            log.warn("WebSocket 拒绝已禁用用户: userId={}", userId);
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
         USER_SESSIONS.computeIfAbsent(userId, id -> ConcurrentHashMap.newKeySet()).add(session);
         SESSION_USERS.put(session, userId);
         userService.updateStatus(userId, Constants.UserStatus.ONLINE);
@@ -106,6 +113,12 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             Map<String, Object> msgMap = JSON.parseObject(message.getPayload(), Map.class);
             Long userId = SESSION_USERS.get(session);
             if (userId == null) return;
+            try {
+                userService.assertEnabled(userId);
+            } catch (BusinessException e) {
+                disconnectUser(userId);
+                return;
+            }
 
             String type = (String) msgMap.get("type");
             switch (type) {
@@ -1037,6 +1050,22 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             replyGroup(session, "group_transfer_owner", true, "ok", groupService.getGroupInfo(groupId));
         } catch (Exception e) {
             replyGroup(session, "group_transfer_owner", false, e.getMessage(), null);
+        }
+    }
+
+    public void disconnectUser(Long userId) {
+        Set<WebSocketSession> sessions = USER_SESSIONS.get(userId);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+        for (WebSocketSession session : java.util.List.copyOf(sessions)) {
+            try {
+                if (session.isOpen()) {
+                    session.close(CloseStatus.POLICY_VIOLATION);
+                }
+            } catch (IOException e) {
+                log.warn("断开已禁用用户连接失败: userId={}", userId);
+            }
         }
     }
 

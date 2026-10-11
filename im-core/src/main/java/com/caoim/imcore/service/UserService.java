@@ -29,12 +29,16 @@ public class UserService {
 
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
+    private final SystemConfigService systemConfigService;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Value("${jwt.expiration}")
     private Long expiration;
 
     public Map<String, Object> register(RegisterDTO dto) {
+        if (!systemConfigService.getBoolean(SystemConfigService.REGISTER_ENABLED, true)) {
+            throw new BusinessException(ErrorCode.REGISTER_CLOSED);
+        }
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(User::getUsername, dto.getUsername());
         if (userMapper.selectCount(wrapper) > 0) {
@@ -49,6 +53,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setNickname(dto.getNickname() != null ? dto.getNickname() : dto.getUsername());
         user.setStatus(Constants.UserStatus.OFFLINE);
+        user.setEnabled(1);
         userMapper.insert(user);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
@@ -76,6 +81,7 @@ public class UserService {
         if (dto.getPassword() == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
             throw new BusinessException(ErrorCode.PASSWORD_ERROR);
         }
+        assertEnabled(user);
 
         user.setStatus(Constants.UserStatus.ONLINE);
         userMapper.updateById(user);
@@ -103,6 +109,7 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
+        assertEnabled(user);
 
         String newToken = jwtUtil.generateToken(userId, username);
         String newRefreshToken = jwtUtil.generateRefreshToken(userId, username);
@@ -150,6 +157,26 @@ public class UserService {
         User user = new User();
         user.setId(userId);
         user.setStatus(status);
+        userMapper.updateById(user);
+    }
+
+    public void assertEnabled(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        assertEnabled(user);
+    }
+
+    public void setEnabled(Long userId, Integer enabled) {
+        if (enabled == null || (enabled != 0 && enabled != 1)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR);
+        }
+        User user = getUserInfo(userId);
+        user.setEnabled(enabled);
+        if (enabled == 0) {
+            user.setStatus(Constants.UserStatus.OFFLINE);
+        }
         userMapper.updateById(user);
     }
 
@@ -214,5 +241,11 @@ public class UserService {
 
         userMapper.updateById(user);
         return user;
+    }
+
+    private void assertEnabled(User user) {
+        if (user.getEnabled() != null && user.getEnabled() == 0) {
+            throw new BusinessException(ErrorCode.USER_DISABLED);
+        }
     }
 }

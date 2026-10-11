@@ -27,7 +27,10 @@ public class User {
     private String email;
     private Integer onlineStatus;
     private LocalDateTime lastOnlineTime;
+    /** 在线状态，沿用既有写入：0 离线，1 在线，2 忙碌 */
     private Integer status;
+    /** 账号启停：0 禁用，1 启用。空值视为启用。 */
+    private Integer enabled;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)

@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS im_user (
     email VARCHAR(100) DEFAULT '' COMMENT '邮箱',
     online_status TINYINT DEFAULT 0 COMMENT '在线状态: 0-离线, 1-在线, 2-忙碌, 3-隐身',
     last_online_time DATETIME DEFAULT NULL COMMENT '最后在线时间',
-    status TINYINT DEFAULT 1 COMMENT '账号状态: 0-禁用, 1-正常',
+    status TINYINT DEFAULT 1 COMMENT '在线状态(代码当前写入此列): 0-离线, 1-在线, 2-忙碌',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '账号启停: 0-禁用, 1-启用',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted TINYINT DEFAULT 0 COMMENT '逻辑删除: 0-未删除, 1-已删除',
@@ -301,6 +302,29 @@ CREATE TABLE IF NOT EXISTS im_group_mute (
     -- 索引优化
     INDEX idx_user_id (user_id)                              -- 查询某用户的所有免打扰群
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群消息免打扰表';
+
+-- ============================================================
+-- 12. 敏感词
+-- ============================================================
+CREATE TABLE IF NOT EXISTS im_sensitive_word (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '敏感词ID',
+    word VARCHAR(50) NOT NULL COMMENT '敏感词',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '1-启用, 0-停用',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_word (word)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='敏感词';
+
+-- ============================================================
+-- 13. 系统配置
+-- ============================================================
+CREATE TABLE IF NOT EXISTS im_system_config (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '配置ID',
+    config_key VARCHAR(64) NOT NULL COMMENT '配置键',
+    config_value VARCHAR(255) NOT NULL COMMENT '配置值',
+    remark VARCHAR(200) DEFAULT '' COMMENT '说明',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_config_key (config_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统配置';
 
 -- ============================================================
 -- 部署验证

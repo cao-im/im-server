@@ -42,6 +42,8 @@ public class MessageService {
     private final GroupService groupService;
     private final GroupMemberMapper groupMemberMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final SystemConfigService systemConfigService;
+    private final SensitiveWordService sensitiveWordService;
 
     public Message sendMessage(Long fromId, Long toId, Long groupId, String content, Integer msgType) {
         return sendMessage(fromId, toId, groupId, content, msgType, null);
@@ -59,6 +61,10 @@ public class MessageService {
 
         if (content == null || content.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "消息内容不能为空");
+        }
+        userService.assertEnabled(fromId);
+        if (msgType == null || msgType == Constants.MessageType.TEXT) {
+            sensitiveWordService.assertClean(content);
         }
 
         if (groupId != null) {
@@ -675,10 +681,14 @@ public class MessageService {
                     .toInstant()
                     .toEpochMilli();
             long now = System.currentTimeMillis();
-            long recallWindowMs = 2 * 60 * 1000; // 2分钟
+            int recallMinutes = systemConfigService.getInt(SystemConfigService.RECALL_MINUTES, 2);
+            if (recallMinutes < 1) {
+                recallMinutes = 2;
+            }
+            long recallWindowMs = recallMinutes * 60L * 1000L;
 
             if (now - msgTime > recallWindowMs) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "超过2分钟无法撤回");
+                throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "超过" + recallMinutes + "分钟无法撤回");
             }
         }
 

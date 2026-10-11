@@ -21,6 +21,7 @@ public class GroupService {
 
     private final GroupMapper groupMapper;
     private final GroupMemberMapper groupMemberMapper;
+    private final SystemConfigService systemConfigService;
 
     @Transactional
     public Group createGroup(Long ownerId, GroupCreateDTO dto) {
@@ -28,6 +29,13 @@ public class GroupService {
         group.setName(dto.getName());
         group.setAvatar(dto.getAvatar() != null ? dto.getAvatar() : "");
         group.setOwnerId(ownerId);
+        int maxMembers = systemConfigService.getInt(SystemConfigService.MAX_GROUP_MEMBERS, 500);
+        int requested = 1 + (dto.getMemberIds() == null ? 0 : dto.getMemberIds().size());
+        if (maxMembers > 0 && requested > maxMembers) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "超过群成员上限");
+        }
+        group.setMaxMembers(maxMembers);
+        group.setStatus(1);
         groupMapper.insert(group);
 
         GroupMember ownerMember = new GroupMember();
@@ -112,6 +120,19 @@ public class GroupService {
             throw new BusinessException(ErrorCode.ALREADY_IN_GROUP);
         }
 
+        Group group = groupMapper.selectById(groupId);
+        int maxMembers = group != null && group.getMaxMembers() != null && group.getMaxMembers() > 0
+                ? group.getMaxMembers()
+                : systemConfigService.getInt(SystemConfigService.MAX_GROUP_MEMBERS, 500);
+        if (maxMembers > 0) {
+            LambdaQueryWrapper<GroupMember> countWrapper = new LambdaQueryWrapper<>();
+            countWrapper.eq(GroupMember::getGroupId, groupId);
+            Long count = groupMemberMapper.selectCount(countWrapper);
+            if (count != null && count >= maxMembers) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "超过群成员上限");
+            }
+        }
+
         GroupMember member = new GroupMember();
         member.setGroupId(groupId);
         member.setUserId(userId);
@@ -166,7 +187,23 @@ public class GroupService {
     }
 
     public void requireMember(Long groupId, Long userId) {
+        Group group = groupMapper.selectById(groupId);
+        if (group == null) {
+            throw new BusinessException(ErrorCode.GROUP_NOT_FOUND);
+        }
+        if (group.getStatus() != null && group.getStatus() == 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "群组已解散");
+        }
         checkIsMember(groupId, userId);
+    }
+
+    public void adminDismiss(Long groupId) {
+        Group group = getGroupInfo(groupId);
+        if (group.getStatus() != null && group.getStatus() == 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR.getCode(), "群组已解散");
+        }
+        group.setStatus(0);
+        groupMapper.updateById(group);
     }
 
     public List<Long> listMemberIds(Long groupId) {
