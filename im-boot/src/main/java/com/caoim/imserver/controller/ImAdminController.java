@@ -1,5 +1,6 @@
 package com.caoim.imserver.controller;
 
+import com.caoim.imcore.common.Constants;
 import com.caoim.imcore.common.Result;
 import com.caoim.imcore.dto.AdminMessageVO;
 import com.caoim.imcore.dto.AdminOverviewDTO;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/admin")
@@ -56,7 +58,19 @@ public class ImAdminController {
     public Result<PageResult<User>> pageUsers(@RequestParam(value = "keyword", required = false) String keyword,
                                               @RequestParam(value = "page", defaultValue = "1") int page,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
-        return Result.success(imAdminQueryService.pageUsers(keyword, page, size));
+        PageResult<User> result = imAdminQueryService.pageUsers(keyword, page, size);
+        Set<Long> onlineIds = webSocketHandler.liveOnlineUserIds();
+        if (result.getRecords() != null) {
+            for (User user : result.getRecords()) {
+                boolean connected = onlineIds.contains(user.getId());
+                if (!connected) {
+                    user.setStatus(Constants.UserStatus.OFFLINE);
+                } else if (user.getStatus() == null || user.getStatus() == Constants.UserStatus.OFFLINE) {
+                    user.setStatus(Constants.UserStatus.ONLINE);
+                }
+            }
+        }
+        return Result.success(result);
     }
 
     @PutMapping("/user/{id}/enabled")

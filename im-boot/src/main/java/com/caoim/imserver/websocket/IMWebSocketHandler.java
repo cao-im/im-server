@@ -12,6 +12,7 @@ import com.caoim.imcore.service.UserService;
 import com.caoim.imcore.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -23,6 +24,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -36,8 +38,11 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     private final GroupService groupService;
     private final JwtUtil jwtUtil;
 
+    private static final long PRESENCE_IDLE_MS = 90_000L;
+
     private static final Map<Long, Set<WebSocketSession>> USER_SESSIONS = new ConcurrentHashMap<>();
     private static final Map<WebSocketSession, Long> SESSION_USERS = new ConcurrentHashMap<>();
+    private static final Map<String, Long> SESSION_SEEN = new ConcurrentHashMap<>();
 
     public IMWebSocketHandler(MessageService messageService, UserService userService, GroupService groupService, JwtUtil jwtUtil) {
         this.messageService = messageService;
@@ -102,6 +107,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
         }
         USER_SESSIONS.computeIfAbsent(userId, id -> ConcurrentHashMap.newKeySet()).add(session);
         SESSION_USERS.put(session, userId);
+        touch(session);
         userService.updateStatus(userId, Constants.UserStatus.ONLINE);
 
         log.info("用户 {} 已连接 WebSocket, 当前在线人数: {}", userId, USER_SESSIONS.size());
@@ -113,6 +119,7 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             Map<String, Object> msgMap = JSON.parseObject(message.getPayload(), Map.class);
             Long userId = SESSION_USERS.get(session);
             if (userId == null) return;
+            touch(session);
             try {
                 userService.assertEnabled(userId);
             } catch (BusinessException e) {
@@ -698,6 +705,11 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        releaseSession(session, status);
+    }
+
+    private void releaseSession(WebSocketSession session, CloseStatus status) {
+        SESSION_SEEN.remove(session.getId());
         Long userId = SESSION_USERS.remove(session);
         if (userId != null) {
             Set<WebSocketSession> sessions = USER_SESSIONS.get(userId);
@@ -712,6 +724,36 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
             log.info("用户 {} 断开一条连接, 原因: {}, 当前在线人数: {}", userId, status, USER_SESSIONS.size());
         } else {
             log.debug("未知会话断开: sessionId={}, 原因: {}", session.getId(), status);
+        }
+    }
+
+    private void touch(WebSocketSession session) {
+        SESSION_SEEN.put(session.getId(), System.currentTimeMillis());
+    }
+
+    @Scheduled(fixedDelay = 15_000)
+    public void sweepStaleSessions() {
+        long now = System.currentTimeMillis();
+        for (Map.Entry<Long, Set<WebSocketSession>> entry : List.copyOf(USER_SESSIONS.entrySet())) {
+            for (WebSocketSession session : List.copyOf(entry.getValue())) {
+                if (!session.isOpen()) {
+                    releaseSession(session, CloseStatus.GOING_AWAY);
+                    continue;
+                }
+                Long seen = SESSION_SEEN.get(session.getId());
+                if (seen == null) {
+                    SESSION_SEEN.put(session.getId(), now);
+                    continue;
+                }
+                if (now - seen > PRESENCE_IDLE_MS) {
+                    log.info("用户 {} 超过 {} 秒没有心跳，关闭连接", entry.getKey(), PRESENCE_IDLE_MS / 1000);
+                    try {
+                        session.close(CloseStatus.GOING_AWAY);
+                    } catch (IOException e) {
+                        releaseSession(session, CloseStatus.GOING_AWAY);
+                    }
+                }
+            }
         }
     }
 
@@ -929,7 +971,17 @@ public class IMWebSocketHandler extends TextWebSocketHandler {
     }
 
     public Set<Long> getOnlineUserIds() {
-        return USER_SESSIONS.keySet();
+        return liveOnlineUserIds();
+    }
+
+    public Set<Long> liveOnlineUserIds() {
+        Set<Long> ids = new HashSet<>();
+        for (Map.Entry<Long, Set<WebSocketSession>> entry : USER_SESSIONS.entrySet()) {
+            if (entry.getValue().stream().anyMatch(WebSocketSession::isOpen)) {
+                ids.add(entry.getKey());
+            }
+        }
+        return ids;
     }
 
     public void pushReadReceipts(Long readerId, List<Map<String, Object>> notices) {

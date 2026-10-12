@@ -1,6 +1,7 @@
 package com.caoim.imcore.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.caoim.imcore.common.BusinessException;
 import com.caoim.imcore.common.Constants;
 import com.caoim.imcore.common.ErrorCode;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,9 +84,6 @@ public class UserService {
             throw new BusinessException(ErrorCode.PASSWORD_ERROR);
         }
         assertEnabled(user);
-
-        user.setStatus(Constants.UserStatus.ONLINE);
-        userMapper.updateById(user);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
@@ -157,7 +156,23 @@ public class UserService {
         User user = new User();
         user.setId(userId);
         user.setStatus(status);
+        if (status != null && status == Constants.UserStatus.OFFLINE) {
+            user.setLastOnlineTime(LocalDateTime.now());
+        }
         userMapper.updateById(user);
+    }
+
+    /**
+     * 把没有实时连接的用户标为离线。在线集合为空时，所有非离线用户都会被纠正。
+     */
+    public int markOfflineExcept(Collection<Long> onlineIds) {
+        LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.set(User::getStatus, Constants.UserStatus.OFFLINE)
+                .ne(User::getStatus, Constants.UserStatus.OFFLINE);
+        if (onlineIds != null && !onlineIds.isEmpty()) {
+            wrapper.notIn(User::getId, onlineIds);
+        }
+        return userMapper.update(null, wrapper);
     }
 
     public void assertEnabled(Long userId) {

@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS im_user (
     email VARCHAR(100) DEFAULT '' COMMENT '邮箱',
     online_status TINYINT DEFAULT 0 COMMENT '在线状态: 0-离线, 1-在线, 2-忙碌, 3-隐身',
     last_online_time DATETIME DEFAULT NULL COMMENT '最后在线时间',
-    status TINYINT DEFAULT 1 COMMENT '在线状态(代码当前写入此列): 0-离线, 1-在线, 2-忙碌',
+    status TINYINT DEFAULT 0 COMMENT '在线状态: 0-离线, 1-在线, 2-忙碌',
     enabled TINYINT NOT NULL DEFAULT 1 COMMENT '账号启停: 0-禁用, 1-启用',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

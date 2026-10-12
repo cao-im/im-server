@@ -34,6 +34,7 @@ public class AdminSchemaInitializer implements ApplicationRunner {
         if (enabledColumn == null || enabledColumn == 0) {
             jdbcTemplate.execute("ALTER TABLE im_user ADD COLUMN enabled TINYINT NOT NULL DEFAULT 1 COMMENT '账号启停: 0-禁用, 1-启用' AFTER status");
         }
+        jdbcTemplate.execute("ALTER TABLE im_user MODIFY COLUMN status TINYINT DEFAULT 0 COMMENT '在线状态: 0-离线, 1-在线, 2-忙碌'");
 
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS im_sensitive_word (

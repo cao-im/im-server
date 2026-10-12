@@ -8,9 +8,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootApplication
+@EnableScheduling
 @MapperScan("com.caoim.imcore.dao")
 @ComponentScan(basePackages = {"com.caoim.imserver", "com.caoim.imcore"})
 public class ImServerApplication implements WebMvcConfigurer {
